@@ -11,8 +11,12 @@ const (
 	MajorOperationGroupCount = 8
 	FalseRegister            = iota
 	TrueRegister
+	InstructionPointer
+	StackPointer
 	PredicateRegister
-	StackPointerRegister
+	CountRegister
+	LinkRegister
+	UserRegisterBegin
 	// groups
 	InstructionGroupArithmetic = iota
 	InstructionGroupMove
@@ -103,11 +107,10 @@ const (
 	MiscOpSystemCall = iota
 	// System commands
 	SystemCommandTerminate = iota
-	SystemCommandGetC
-	SystemCommandPutC
-	SystemCommandPanic
+	SystemCommandPanic     = 255
 	// Error codes
 	ErrorNone = iota
+	ErrorPanic
 	ErrorGetRegisterOutOfRange
 	ErrorPutRegisterOutOfRange
 	ErrorInvalidInstructionGroupProvided
@@ -126,6 +129,7 @@ const (
 
 var errorLookup = []string{
 	"None",
+	"The core was sent a panic signal with argument %d!",
 	"Attempted to get the value of invalid register r%d",
 	"Attempted to set the value of invalid register r%d",
 	"Instruction group %d is not a valid instruction group!",
@@ -260,46 +264,99 @@ func (this IrisError) Error() string {
 }
 
 type ExecutionUnit func(*Core, *DecodedInstruction) error
+type SystemCall ExecutionUnit
 type Core struct {
-	gpr                [RegisterCount]Word
-	Code               [MemorySize]Instruction
-	Data               [MemorySize]Word
-	Stack              [MemorySize]Word
-	Pc                 Word
+	gpr   [RegisterCount - UserRegisterBegin]Word
+	Code  [MemorySize]Instruction
+	Data  [MemorySize]Word
+	Stack [MemorySize]Word
+	// internal registers that should be easy to find
+	instructionPointer Word
+	stackPointer       Word
+	link               Word
+	count              Word
+	predicate          Word
 	advancePc          bool
 	terminateExecution bool
 	Xunits             [2]ExecutionUnit
+	SystemCalls        [256]SystemCall
 }
 
 func defaultExtendedUnit(core *Core, inst *DecodedInstruction) error {
 	return newError(ErrorInvalidInstructionGroupProvided, uint(inst.Group))
 }
+
 func (this *Core) SetRegister(index byte, value Word) error {
 	switch index {
 	case FalseRegister:
 		return newError(ErrorWriteToFalseRegister, uint(value))
 	case TrueRegister:
 		return newError(ErrorWriteToTrueRegister, uint(value))
+	case InstructionPointer:
+		this.instructionPointer = value
+	case StackPointer:
+		this.stackPointer = value
+	case PredicateRegister:
+		this.predicate = value
+	case CountRegister:
+		this.count = value
+	case LinkRegister:
+		this.link = value
 	default:
-		this.gpr[index] = value
-		return nil
+		this.gpr[index-UserRegisterBegin] = value
 	}
+	return nil
 }
 func (this *Core) GetRegister(index byte) Word {
-	return this.gpr[index]
+	switch index {
+	case FalseRegister:
+		return 0
+	case TrueRegister:
+		return 1
+	case InstructionPointer:
+		return this.instructionPointer
+	case StackPointer:
+		return this.stackPointer
+	case PredicateRegister:
+		return this.predicate
+	case LinkRegister:
+		return this.link
+	case CountRegister:
+		return this.count
+	default:
+		// do the offset calculation
+		return this.gpr[index-UserRegisterBegin]
+	}
+}
+func (this *Core) InstructionPointer() Word {
+	return this.instructionPointer
+}
+func (this *Core) SetInstructionPointer(value Word) {
+	this.instructionPointer = value
+}
+func (this *Core) HaltExecution() {
+	this.terminateExecution = true
+}
+func (this *Core) ResumeExecution() {
+	this.terminateExecution = false
 }
 func New() *Core {
 	var c Core
-	c.Pc = 0
+	c.instructionPointer = 0
 	c.advancePc = true
 	c.terminateExecution = false
-	c.gpr[FalseRegister] = 0
-	c.gpr[TrueRegister] = 1
-	c.gpr[PredicateRegister] = 0
-	c.gpr[StackPointerRegister] = 0xFFFF
+	c.predicate = 0
+	c.stackPointer = 0xFFFF
+	c.link = 0
+	c.count = 0
 	for i := 0; i < len(c.Xunits); i++ {
 		c.Xunits[i] = defaultExtendedUnit
 	}
+	for i := 0; i < len(c.SystemCalls); i++ {
+		c.SystemCalls[i] = defaultSystemCall
+	}
+	c.SystemCalls[SystemCommandTerminate] = terminateSystemCall
+	c.SystemCalls[SystemCommandPanic] = panicSystemCall
 	return &c
 }
 
@@ -367,6 +424,18 @@ func (this *Core) misc(inst *DecodedInstruction) error {
 		return newError(ErrorInvalidMiscOperation, uint(inst.Op))
 	}
 }
-func (this *Core) SystemCall(inst *DecodedInstruction) error {
+func panicSystemCall(core *Core, inst *DecodedInstruction) error {
+	// we don't want to panic the program itself but generate a new error
+	// look at the data attached to the panic and encode it
+	return newError(ErrorPanic, uint(inst.Immediate()))
+}
+func terminateSystemCall(core *Core, inst *DecodedInstruction) error {
+	core.HaltExecution()
 	return nil
+}
+func defaultSystemCall(core *Core, inst *DecodedInstruction) error {
+	return newError(ErrorInvalidSystemCommand, uint(inst.Data[0]))
+}
+func (this *Core) SystemCall(inst *DecodedInstruction) error {
+	return this.SystemCalls[inst.Data[0]](this, inst)
 }
