@@ -22,3 +22,50 @@ type Core struct {
 	AdvancePC          bool
 	TerminateExecution bool
 }
+
+const (
+	InstructionGroupArithmetic = iota
+	InstructionGroupMove
+	InstructionGroupJump
+	InstructionGroupCompare
+	InstructionGroupMisc
+)
+
+const (
+	// arithmetic operations
+	ArithmeticOpAdd = iota
+	ArithmeticOpSub
+	ArithmeticOpMul
+	ArithmeticOpDiv
+	ArithmeticOpRem
+	ArithmeticOpShiftLeft
+	ArithmeticOpShiftRight
+	ArithmeticOpBinaryAnd
+	ArithmeticOpBinaryOr
+	ArithmeticOpBinaryNot
+	ArithmeticOpBinaryXor
+	ArithmeticOpAddImmediate
+	ArithmeticOpSubImmediate
+	ArithmeticOpMulImmediate
+	ArithmeticOpDivImmediate
+	ArithmeticOpRemImmediate
+	ArithmeticOpShiftLeftImmediate
+	ArithmeticOpShiftRightImmediate
+	// Move Operations
+	MoveOpMove = iota
+	MoveOpSwap
+	MoveOpSwapRegAddr
+	MoveOpSwapAddrAddr
+	MoveOpSwapRegMem
+	MoveOpSwapAddrMem
+	MoveOpSet
+	MoveOpLoad
+	MoveOpLoadMem
+	MoveOpStore
+	MoveOpStoreAddr
+	MoveOpStoreMem
+	MoveOpStoreImm
+	MoveOpPush
+	MoveOpPushImmediate
+	MoveOpPop
+)
