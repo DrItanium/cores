@@ -9,9 +9,9 @@ const (
 	StackPointerRegisterIndex = 254
 )
 
-type uint16 Word
-type uint32 DWord
-type DWord Instruction
+type Word uint16
+type Dword uint32
+type Instruction Dword
 
 type Core struct {
 	Gpr                [RegisterCount]Word
