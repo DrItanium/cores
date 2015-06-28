@@ -9,6 +9,7 @@ const (
 	RegisterCount            = 256
 	MemorySize               = 65536
 	MajorOperationGroupCount = 8
+	SystemCallCount          = 256
 	FalseRegister            = iota
 	TrueRegister
 	InstructionPointer
@@ -265,6 +266,37 @@ func (this IrisError) Error() string {
 
 type ExecutionUnit func(*Core, *DecodedInstruction) error
 type SystemCall ExecutionUnit
+type Core interface {
+	Register(index byte) Word
+	SetRegister(index byte, value Word) error
+	CodeMemory(address Word) Instruction
+	SetCodeMemory(address Word, value Instruction) error
+	StackMemory(address Word) Word
+	SetStackMemory(address, value Word) error
+	DataMemory(address Word) Word
+	SetDataMemory(address, value Word) error
+	// special registers
+	InstructionPointer() Word
+	SetInstructionPointer(value Word) error
+	StackPointer() Word
+	SetStackPointer(value Word) error
+	Predicate() Word
+	SetPredicate(value Word) error
+	LinkRegister() Word
+	SetLinkRegister(value Word) error
+	CountRegister() Word
+	SetCountRegister(value Word) error
+	// execution unit related stuff
+	InstallExecutionUnit(group byte, fn ExecutionUnit) error
+	InvokeExecution(inst *DecodedInstruction) error
+	// system call related stuff
+	InstallSystemCall(index byte, fn SystemCall) error
+	SystemCall(inst *DecodedInstruction) error
+	HaltExecution()
+	ResumeExecution()
+	// how to dispatch from the front end to the backend
+	Dispatch(inst Instruction) error
+}
 type Core struct {
 	gpr   [RegisterCount - UserRegisterBegin]Word
 	Code  [MemorySize]Instruction
@@ -278,8 +310,8 @@ type Core struct {
 	predicate          Word
 	advancePc          bool
 	terminateExecution bool
-	Xunits             [2]ExecutionUnit
-	SystemCalls        [256]SystemCall
+	Groups             [MajorOperationGroupCount]ExecutionUnit
+	SystemCalls        [SystemCallCount]SystemCall
 }
 
 func defaultExtendedUnit(core *Core, inst *DecodedInstruction) error {
@@ -349,23 +381,24 @@ func New() *Core {
 	c.stackPointer = 0xFFFF
 	c.link = 0
 	c.count = 0
-	for i := 0; i < len(c.Xunits); i++ {
+	for i := 0; i < MajorOperationGroupCount; i++ {
 		c.Xunits[i] = defaultExtendedUnit
 	}
-	for i := 0; i < len(c.SystemCalls); i++ {
+	for i := 0; i < SystemCallCount; i++ {
 		c.SystemCalls[i] = defaultSystemCall
 	}
 	c.SystemCalls[SystemCommandTerminate] = terminateSystemCall
 	c.SystemCalls[SystemCommandPanic] = panicSystemCall
 	return &c
 }
-
 func (this *Core) Dispatch(inst Instruction) error {
 	this.advancePc = true
 	if di, err := inst.Decode(); err != nil {
 		return err
 	} else {
+		return
 		switch di.Group {
+
 		case InstructionGroupArithmetic:
 			return this.arithmetic(di)
 		case InstructionGroupMove:
@@ -392,6 +425,30 @@ func (this *Core) extended1(inst *DecodedInstruction) error {
 	return this.Xunits[1](this, inst)
 }
 
+func (this *Core) misc(inst *DecodedInstruction) error {
+	switch inst.Op {
+	case MiscOpSystemCall:
+		return this.SystemCall(inst)
+	default:
+		return newError(ErrorInvalidMiscOperation, uint(inst.Op))
+	}
+}
+func panicSystemCall(core *Core, inst *DecodedInstruction) error {
+	// we don't want to panic the program itself but generate a new error
+	// look at the data attached to the panic and encode it
+	return newError(ErrorPanic, uint(inst.Immediate()))
+}
+func terminateSystemCall(core *Core, inst *DecodedInstruction) error {
+	core.HaltExecution()
+	return nil
+}
+func defaultSystemCall(core *Core, inst *DecodedInstruction) error {
+	return newError(ErrorInvalidSystemCommand, uint(inst.Data[0]))
+}
+func (this *Core) SystemCall(inst *DecodedInstruction) error {
+	return this.SystemCalls[inst.Data[0]](this, inst)
+}
+
 func (this *Core) arithmetic(inst *DecodedInstruction) error {
 	switch inst.Op {
 	default:
@@ -415,27 +472,4 @@ func (this *Core) compare(inst *DecodedInstruction) error {
 	default:
 		return newError(ErrorInvalidCompareOperation, uint(inst.Op))
 	}
-}
-func (this *Core) misc(inst *DecodedInstruction) error {
-	switch inst.Op {
-	case MiscOpSystemCall:
-		return this.SystemCall(inst)
-	default:
-		return newError(ErrorInvalidMiscOperation, uint(inst.Op))
-	}
-}
-func panicSystemCall(core *Core, inst *DecodedInstruction) error {
-	// we don't want to panic the program itself but generate a new error
-	// look at the data attached to the panic and encode it
-	return newError(ErrorPanic, uint(inst.Immediate()))
-}
-func terminateSystemCall(core *Core, inst *DecodedInstruction) error {
-	core.HaltExecution()
-	return nil
-}
-func defaultSystemCall(core *Core, inst *DecodedInstruction) error {
-	return newError(ErrorInvalidSystemCommand, uint(inst.Data[0]))
-}
-func (this *Core) SystemCall(inst *DecodedInstruction) error {
-	return this.SystemCalls[inst.Data[0]](this, inst)
 }
