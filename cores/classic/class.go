@@ -39,7 +39,7 @@ func (this *Backend) SetRegister(index byte, value iris1.Word) error {
 	}
 	return nil
 }
-func (this Backend) GetRegister(index byte) iris1.Word {
+func (this *Backend) Register(index byte) iris1.Word {
 	switch index {
 	case iris1.FalseRegister:
 		return 0
@@ -61,7 +61,7 @@ func (this Backend) GetRegister(index byte) iris1.Word {
 	}
 }
 
-func (this Backend) CodeMemory(address iris1.Word) iris1.Instruction {
+func (this *Backend) CodeMemory(address iris1.Word) iris1.Instruction {
 	return this.code[address]
 }
 func (this *Backend) SetCodeMemory(address iris1.Word, value iris1.Instruction) error {
@@ -72,7 +72,7 @@ func (this *Backend) Push(value iris1.Word) {
 	this.stackPointer++
 	this.stack[this.stackPointer] = value
 }
-func (this Backend) Peek() iris1.Word {
+func (this *Backend) Peek() iris1.Word {
 	return this.stack[this.stackPointer]
 }
 func (this *Backend) Pop() iris1.Word {
@@ -80,7 +80,7 @@ func (this *Backend) Pop() iris1.Word {
 	this.stackPointer--
 	return value
 }
-func (this Backend) DataMemory(address iris1.Word) iris1.Word {
+func (this *Backend) DataMemory(address iris1.Word) iris1.Word {
 	return this.data[address]
 }
 func (this *Backend) SetDataMemory(address, value iris1.Word) error {

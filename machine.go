@@ -19,96 +19,6 @@ const (
 	LinkRegister
 	UserRegisterBegin
 	// groups
-	InstructionGroupArithmetic = iota
-	InstructionGroupMove
-	InstructionGroupJump
-	InstructionGroupCompare
-	InstructionGroupMisc
-	InstructionGroupExtended0
-	InstructionGroupExtended1
-	// arithmetic operations
-	ArithmeticOpAdd = iota
-	ArithmeticOpSub
-	ArithmeticOpMul
-	ArithmeticOpDiv
-	ArithmeticOpRem
-	ArithmeticOpShiftLeft
-	ArithmeticOpShiftRight
-	ArithmeticOpBinaryAnd
-	ArithmeticOpBinaryOr
-	ArithmeticOpBinaryNot
-	ArithmeticOpBinaryXor
-	ArithmeticOpAddImmediate
-	ArithmeticOpSubImmediate
-	ArithmeticOpMulImmediate
-	ArithmeticOpDivImmediate
-	ArithmeticOpRemImmediate
-	ArithmeticOpShiftLeftImmediate
-	ArithmeticOpShiftRightImmediate
-	// Move Operations
-	MoveOpMove = iota
-	MoveOpSwap
-	MoveOpSwapRegAddr
-	MoveOpSwapAddrAddr
-	MoveOpSwapRegMem
-	MoveOpSwapAddrMem
-	MoveOpSet
-	MoveOpLoad
-	MoveOpLoadMem
-	MoveOpStore
-	MoveOpStoreAddr
-	MoveOpStoreMem
-	MoveOpStoreImm
-	MoveOpPush
-	MoveOpPushImmediate
-	MoveOpPop
-	// Jump Operations
-	JumpOpUnconditionalImmediate = iota
-	JumpOpUnconditionalImmediateLink
-	JumpOpUnconditionalRegister
-	JumpOpUnconditionalRegisterLink
-	JumpOpConditionalTrueImmediate
-	JumpOpConditionalTrueImmediateLink
-	JumpOpConditionalTrueRegister
-	JumpOpConditionalTrueRegisterLink
-	JumpOpConditionalFalseImmediate
-	JumpOpConditionalFalseImmediateLink
-	JumpOpConditionalFalseRegister
-	JumpOpConditionalFalseRegisterLink
-	JumpOpIfThenElseNormalPredTrue
-	JumpOpIfThenElseNormalPredFalse
-	JumpOpIfThenElseLinkPredTrue
-	JumpOpIfThenElseLinkPredFalse
-	// Compare operations
-	CompareOpEq = iota
-	CompareOpEqAnd
-	CompareOpEqOr
-	CompareOpEqXor
-	CompareOpNeq
-	CompareOpNeqAnd
-	CompareOpNeqOr
-	CompareOpNeqXor
-	CompareOpLessThan
-	CompareOpLessThanAnd
-	CompareOpLessThanOr
-	CompareOpLessThanXor
-	CompareOpGreaterThan
-	CompareOpGreaterThanAnd
-	CompareOpGreaterThanOr
-	CompareOpGreaterThanXor
-	CompareOpLessThanOrEqualTo
-	CompareOpLessThanOrEqualToAnd
-	CompareOpLessThanOrEqualToOr
-	CompareOpLessThanOrEqualToXor
-	CompareOpGreaterThanOrEqualTo
-	CompareOpGreaterThanOrEqualToAnd
-	CompareOpGreaterThanOrEqualToOr
-	CompareOpGreaterThanOrEqualToXor
-	// Misc operations
-	MiscOpSystemCall = iota
-	// System commands
-	SystemCommandTerminate = iota
-	SystemCommandPanic     = 255
 	// Error codes
 	ErrorNone = iota
 	ErrorPanic
@@ -291,6 +201,15 @@ func (this *Core) Register(index byte) Word {
 }
 func (this *Core) SetRegister(index byte, value Word) error {
 	return this.backend.SetRegister(index, value)
+}
+func (this *Core) Push(value Word) {
+	this.backend.Push(value)
+}
+func (this *Core) Pop() Word {
+	return this.backend.Pop()
+}
+func (this *Core) Peek() Word {
+	return this.backend.Peek()
 }
 func New(backend Backend) (*Core, error) {
 	var c Core
