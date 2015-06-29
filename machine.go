@@ -292,3 +292,9 @@ func (this *Core) ResumeExecution() {
 func defaultExtendedUnit(core *Core, inst *DecodedInstruction) error {
 	return NewError(ErrorInvalidInstructionGroupProvided, uint(inst.Group))
 }
+func (this *Core) DataMemory(addr Word) Word {
+	return this.backend.DataMemory(addr)
+}
+func (this *Core) SetDataMemory(addr, value Word) error {
+	return this.backend.SetDataMemory(addr, value)
+}

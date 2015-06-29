@@ -49,6 +49,7 @@ const (
 	MoveOpPush
 	MoveOpPushImmediate
 	MoveOpPop
+	MoveOpPeek
 	// always last
 	MoveOpCount
 	// Jump Operations
@@ -107,6 +108,9 @@ func NewCore() (*iris1.Core, error) {
 		return nil, err
 	}
 	if err0 := core.InstallExecutionUnit(InstructionGroupArithmetic, arithmetic); err0 != nil {
+		return nil, err0
+	}
+	if err0 := core.InstallExecutionUnit(InstructionGroupMove, move); err0 != nil {
 		return nil, err0
 	}
 	return core, nil
@@ -186,5 +190,91 @@ func arithmetic(core *iris1.Core, inst *iris1.DecodedInstruction) error {
 			return fmt.Errorf("Programmer failure! Report it as such!")
 		}
 		return core.SetRegister(dest, result)
+	}
+}
+func swapMemory(core *iris1.Core, addr0, data0, addr1, data1 iris1.Word) error {
+	if err := core.SetDataMemory(addr0, data1); err != nil {
+		return err
+	} else if err := core.SetDataMemory(addr1, data0); err != nil {
+		return err
+	} else {
+		return nil
+	}
+}
+func swapMemoryAndRegister(core *iris1.Core, reg byte, data0, addr, data1 iris1.Word) error {
+	if err := core.SetRegister(reg, data1); err != nil {
+		return err
+	} else if err := core.SetDataMemory(addr, data0); err != nil {
+		return err
+	} else {
+		return nil
+	}
+}
+func move(core *iris1.Core, inst *iris1.DecodedInstruction) error {
+	if inst.Op >= MoveOpCount {
+		return fmt.Errorf("Op index %d is not a valid move operation", inst.Op)
+	} else {
+		dest := inst.Data[0]
+		src0 := inst.Data[1]
+		switch inst.Op {
+		case MoveOpMove:
+			return core.SetRegister(dest, core.Register(src0))
+		case MoveOpSwap:
+			r0 := core.Register(dest)
+			r1 := core.Register(src0)
+			if err := core.SetRegister(src0, r0); err != nil {
+				return err
+			} else if err := core.SetRegister(dest, r1); err != nil {
+				return err
+			} else {
+				return nil
+			}
+		case MoveOpSwapRegAddr:
+			reg := core.Register(dest)
+			memaddr := core.Register(src0)
+			memcontents := core.DataMemory(memaddr)
+			return swapMemoryAndRegister(core, dest, reg, memaddr, memcontents)
+		case MoveOpSwapAddrAddr:
+			addr0 := core.Register(dest)
+			addr1 := core.Register(src0)
+			mem0 := core.DataMemory(addr0)
+			mem1 := core.DataMemory(addr1)
+			return swapMemory(core, addr0, mem0, addr1, mem1)
+		case MoveOpSwapRegMem:
+			addr := inst.Immediate()
+			return swapMemoryAndRegister(core, dest, core.Register(dest), addr, core.DataMemory(addr))
+		case MoveOpSwapAddrMem:
+			addr0 := core.Register(dest)
+			addr1 := inst.Immediate()
+			mem0 := core.DataMemory(addr0)
+			mem1 := core.DataMemory(addr1)
+			return swapMemory(core, addr0, mem0, addr1, mem1)
+		case MoveOpSet:
+			return core.SetRegister(dest, inst.Immediate())
+		case MoveOpLoad:
+			return core.SetRegister(dest, core.DataMemory(core.Register(src0)))
+		case MoveOpLoadMem:
+			return core.SetRegister(dest, core.DataMemory(inst.Immediate()))
+		case MoveOpStore:
+			return core.SetDataMemory(core.Register(dest), core.Register(src0))
+		case MoveOpStoreAddr:
+			return core.SetDataMemory(core.Register(dest), core.DataMemory(core.Register(src0)))
+		case MoveOpStoreMem:
+			return core.SetDataMemory(core.Register(dest), core.DataMemory(inst.Immediate()))
+		case MoveOpStoreImm:
+			return core.SetDataMemory(core.Register(dest), inst.Immediate())
+		case MoveOpPush:
+			core.Push(core.Register(dest))
+			return nil
+		case MoveOpPushImmediate:
+			core.Push(inst.Immediate())
+			return nil
+		case MoveOpPop:
+			return core.SetRegister(dest, core.Pop())
+		case MoveOpPeek:
+			return core.SetRegister(dest, core.Peek())
+		default:
+			return fmt.Errorf("Programmer failure! Report it as such!")
+		}
 	}
 }
