@@ -191,7 +191,7 @@ func (this *Instruction) setByte(index int, value byte) error {
 	case 3:
 		*this = ((*this &^ 0xFF000000) | (Instruction(value) << 24))
 	default:
-		return newError(ErrorEncodeByteOutOfRange, uint(index))
+		return NewError(ErrorEncodeByteOutOfRange, uint(index))
 	}
 	return nil
 }
@@ -250,7 +250,7 @@ type IrisError struct {
 	value, code uint
 }
 
-func newError(code, value uint) error {
+func NewError(code, value uint) error {
 	return &IrisError{code: code, value: value}
 }
 
@@ -266,105 +266,103 @@ func (this IrisError) Error() string {
 
 type ExecutionUnit func(*Core, *DecodedInstruction) error
 type SystemCall ExecutionUnit
-type Core interface {
+type Backend interface {
 	Register(index byte) Word
 	SetRegister(index byte, value Word) error
 	CodeMemory(address Word) Instruction
 	SetCodeMemory(address Word, value Instruction) error
-	StackMemory(address Word) Word
-	SetStackMemory(address, value Word) error
+	Push(value Word)
+	Pop() Word
+	Peek() Word
 	DataMemory(address Word) Word
 	SetDataMemory(address, value Word) error
-	// special registers
-	InstructionPointer() Word
-	SetInstructionPointer(value Word) error
-	StackPointer() Word
-	SetStackPointer(value Word) error
-	Predicate() Word
-	SetPredicate(value Word) error
-	LinkRegister() Word
-	SetLinkRegister(value Word) error
-	CountRegister() Word
-	SetCountRegister(value Word) error
-	// execution unit related stuff
-	InstallExecutionUnit(group byte, fn ExecutionUnit) error
-	InvokeExecution(inst *DecodedInstruction) error
-	// system call related stuff
-	InstallSystemCall(index byte, fn SystemCall) error
-	SystemCall(inst *DecodedInstruction) error
-	HaltExecution()
-	ResumeExecution()
-	// how to dispatch from the front end to the backend
-	Dispatch(inst Instruction) error
 }
+
 type Core struct {
-	gpr   [RegisterCount - UserRegisterBegin]Word
-	Code  [MemorySize]Instruction
-	Data  [MemorySize]Word
-	Stack [MemorySize]Word
-	// internal registers that should be easy to find
-	instructionPointer Word
-	stackPointer       Word
-	link               Word
-	count              Word
-	predicate          Word
+	backend            Backend
 	advancePc          bool
 	terminateExecution bool
-	Groups             [MajorOperationGroupCount]ExecutionUnit
-	SystemCalls        [SystemCallCount]SystemCall
+	groups             [MajorOperationGroupCount]ExecutionUnit
+	systemCalls        [SystemCallCount]SystemCall
 }
 
-func defaultExtendedUnit(core *Core, inst *DecodedInstruction) error {
-	return newError(ErrorInvalidInstructionGroupProvided, uint(inst.Group))
+func (this *Core) Register(index byte) Word {
+	return this.backend.Register(index)
 }
-
 func (this *Core) SetRegister(index byte, value Word) error {
-	switch index {
-	case FalseRegister:
-		return newError(ErrorWriteToFalseRegister, uint(value))
-	case TrueRegister:
-		return newError(ErrorWriteToTrueRegister, uint(value))
-	case InstructionPointer:
-		this.instructionPointer = value
-	case StackPointer:
-		this.stackPointer = value
-	case PredicateRegister:
-		this.predicate = value
-	case CountRegister:
-		this.count = value
-	case LinkRegister:
-		this.link = value
-	default:
-		this.gpr[index-UserRegisterBegin] = value
+	return this.backend.SetRegister(index, value)
+}
+func New(backend Backend) (*Core, error) {
+	var c Core
+	c.backend = backend
+	c.advancePc = true
+	c.terminateExecution = false
+	if err := c.SetRegister(InstructionPointer, 0); err != nil {
+		return nil, err
 	}
+	if err := c.SetRegister(PredicateRegister, 0); err != nil {
+		return nil, err
+	}
+	if err := c.SetRegister(StackPointer, 0xFFFF); err != nil {
+		return nil, err
+	}
+	if err := c.SetRegister(LinkRegister, 0); err != nil {
+		return nil, err
+	}
+	if err := c.SetRegister(CountRegister, 0); err != nil {
+		return nil, err
+	}
+	for i := 0; i < MajorOperationGroupCount; i++ {
+		if err := c.InstallExecutionUnit(byte(i), defaultExtendedUnit); err != nil {
+			return nil, err
+		}
+	}
+	for i := 0; i < SystemCallCount; i++ {
+		if err := c.InstallSystemCall(byte(i), defaultSystemCall); err != nil {
+			return nil, err
+		}
+	}
+	return &c, nil
+}
+
+func (this *Core) InstallExecutionUnit(group byte, fn ExecutionUnit) error {
+	if group >= MajorOperationGroupCount {
+		return NewError(ErrorGroupValueOutOfRange, uint(group))
+	} else {
+		this.groups[group] = fn
+		return nil
+	}
+}
+func (this *Core) InvokeExecution(inst *DecodedInstruction) error {
+	return this.groups[inst.Group](this, inst)
+}
+func (this *Core) InstallSystemCall(offset byte, fn SystemCall) error {
+	this.systemCalls[offset] = fn
 	return nil
 }
-func (this *Core) GetRegister(index byte) Word {
-	switch index {
-	case FalseRegister:
-		return 0
-	case TrueRegister:
-		return 1
-	case InstructionPointer:
-		return this.instructionPointer
-	case StackPointer:
-		return this.stackPointer
-	case PredicateRegister:
-		return this.predicate
-	case LinkRegister:
-		return this.link
-	case CountRegister:
-		return this.count
-	default:
-		// do the offset calculation
-		return this.gpr[index-UserRegisterBegin]
+func (this *Core) SystemCall(inst *DecodedInstruction) error {
+	return this.systemCalls[inst.Data[0]](this, inst)
+}
+
+func (this *Core) Dispatch(inst Instruction) error {
+	this.advancePc = true
+	if di, err := inst.Decode(); err != nil {
+		return err
+	} else {
+		return this.InvokeExecution(di)
 	}
 }
-func (this *Core) InstructionPointer() Word {
-	return this.instructionPointer
+func panicSystemCall(core *Core, inst *DecodedInstruction) error {
+	// we don't want to panic the program itself but generate a new error
+	// look at the data attached to the panic and encode it
+	return NewError(ErrorPanic, uint(inst.Immediate()))
 }
-func (this *Core) SetInstructionPointer(value Word) {
-	this.instructionPointer = value
+func defaultSystemCall(core *Core, inst *DecodedInstruction) error {
+	return NewError(ErrorInvalidSystemCommand, uint(inst.Data[0]))
+}
+
+func (this *Core) ShouldExecute() bool {
+	return this.terminateExecution
 }
 func (this *Core) HaltExecution() {
 	this.terminateExecution = true
@@ -372,104 +370,6 @@ func (this *Core) HaltExecution() {
 func (this *Core) ResumeExecution() {
 	this.terminateExecution = false
 }
-func New() *Core {
-	var c Core
-	c.instructionPointer = 0
-	c.advancePc = true
-	c.terminateExecution = false
-	c.predicate = 0
-	c.stackPointer = 0xFFFF
-	c.link = 0
-	c.count = 0
-	for i := 0; i < MajorOperationGroupCount; i++ {
-		c.Xunits[i] = defaultExtendedUnit
-	}
-	for i := 0; i < SystemCallCount; i++ {
-		c.SystemCalls[i] = defaultSystemCall
-	}
-	c.SystemCalls[SystemCommandTerminate] = terminateSystemCall
-	c.SystemCalls[SystemCommandPanic] = panicSystemCall
-	return &c
-}
-func (this *Core) Dispatch(inst Instruction) error {
-	this.advancePc = true
-	if di, err := inst.Decode(); err != nil {
-		return err
-	} else {
-		return
-		switch di.Group {
-
-		case InstructionGroupArithmetic:
-			return this.arithmetic(di)
-		case InstructionGroupMove:
-			return this.move(di)
-		case InstructionGroupJump:
-			return this.jump(di)
-		case InstructionGroupCompare:
-			return this.compare(di)
-		case InstructionGroupMisc:
-			return this.misc(di)
-		case InstructionGroupExtended0: // expansion group0
-			return this.extended0(di)
-		case InstructionGroupExtended1: // expansion group1
-			return this.extended1(di)
-		default:
-			return newError(ErrorInvalidInstructionGroupProvided, uint(di.Group))
-		}
-	}
-}
-func (this *Core) extended0(inst *DecodedInstruction) error {
-	return this.Xunits[0](this, inst)
-}
-func (this *Core) extended1(inst *DecodedInstruction) error {
-	return this.Xunits[1](this, inst)
-}
-
-func (this *Core) misc(inst *DecodedInstruction) error {
-	switch inst.Op {
-	case MiscOpSystemCall:
-		return this.SystemCall(inst)
-	default:
-		return newError(ErrorInvalidMiscOperation, uint(inst.Op))
-	}
-}
-func panicSystemCall(core *Core, inst *DecodedInstruction) error {
-	// we don't want to panic the program itself but generate a new error
-	// look at the data attached to the panic and encode it
-	return newError(ErrorPanic, uint(inst.Immediate()))
-}
-func terminateSystemCall(core *Core, inst *DecodedInstruction) error {
-	core.HaltExecution()
-	return nil
-}
-func defaultSystemCall(core *Core, inst *DecodedInstruction) error {
-	return newError(ErrorInvalidSystemCommand, uint(inst.Data[0]))
-}
-func (this *Core) SystemCall(inst *DecodedInstruction) error {
-	return this.SystemCalls[inst.Data[0]](this, inst)
-}
-
-func (this *Core) arithmetic(inst *DecodedInstruction) error {
-	switch inst.Op {
-	default:
-		return newError(ErrorInvalidArithmeticOperation, uint(inst.Op))
-	}
-}
-func (this *Core) move(inst *DecodedInstruction) error {
-	switch inst.Op {
-	default:
-		return newError(ErrorInvalidMoveOperation, uint(inst.Op))
-	}
-}
-func (this *Core) jump(inst *DecodedInstruction) error {
-	switch inst.Op {
-	default:
-		return newError(ErrorInvalidJumpOperation, uint(inst.Op))
-	}
-}
-func (this *Core) compare(inst *DecodedInstruction) error {
-	switch inst.Op {
-	default:
-		return newError(ErrorInvalidCompareOperation, uint(inst.Op))
-	}
+func defaultExtendedUnit(core *Core, inst *DecodedInstruction) error {
+	return NewError(ErrorInvalidInstructionGroupProvided, uint(inst.Group))
 }
