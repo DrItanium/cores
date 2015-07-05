@@ -69,6 +69,8 @@ const (
 	JumpOpIfThenElseNormalPredFalse
 	JumpOpIfThenElseLinkPredTrue
 	JumpOpIfThenElseLinkPredFalse
+	// always last
+	JumpOpCount
 	// Compare operations
 	CompareOpEq = iota
 	CompareOpEqAnd
@@ -101,7 +103,7 @@ const (
 	SystemCommandPanic     = 255
 )
 
-func NewCore() (*iris1.Core, error) {
+func New() (*iris1.Core, error) {
 	var b Backend
 	core, err := iris1.New(&b)
 	if err != nil {
@@ -276,5 +278,57 @@ func move(core *iris1.Core, inst *iris1.DecodedInstruction) error {
 		default:
 			return fmt.Errorf("Programmer failure! Report it as such!")
 		}
+	}
+}
+func jumpUpdateLink(core *iris1.Core, link byte, next, target Word) error {
+	if err := core.SetRegister(link, next); err != nil {
+		return err
+	} else {
+		return core.SetRegister(iris.InstructionPointer, target)
+	}
+}
+func evalPredicate(value Word) bool {
+	return value != 0
+}
+func loadAndEvalPredicate(core *iris1.Core, index byte) bool {
+	return evalPredicate(core.Register(index))
+}
+func jump(core *iris1.Core, inst *iris1.DecodedInstruction) error {
+	switch inst.Op {
+	case JumpOpUnconditionalImmediate:
+		return core.SetRegister(iris1.InstructionPointer, inst.Immediate())
+	case JumpOpUnconditionalImmediateLink:
+		dest := inst.Data[0]
+		imm := inst.Immediate()
+		next := core.Register(iris.InstructionPointer) + 1 // next instruction
+		return jumpUpdateLink(core, dest, next, imm)
+	case JumpOpUnconditionalRegister:
+		target := inst.Data[0]
+		return core.SetRegister(iris.InstructionPointer, core.Register(target))
+	case JumpOpUnconditionalRegisterLink:
+		link := inst.Data[0]
+		addr := inst.Data[1]
+		target := core.Register(addr)
+		next := core.Register(iris.InstructionPointer) + 1
+		return jumpUpdateLink(core, link, next, target)
+	case JumpOpConditionalTrueImmediate:
+		if loadAndEvalPredicate(core, inst.Data[0]) {
+			return core.SetRegister(iris.InstructionPointer, inst.Immediate())
+		} else {
+			return nil
+		}
+	case JumpOpConditionalTrueImmediateLink:
+	case JumpOpConditionalTrueRegister:
+	case JumpOpConditionalTrueRegisterLink:
+	case JumpOpConditionalFalseImmediate:
+	case JumpOpConditionalFalseImmediateLink:
+	case JumpOpConditionalFalseRegister:
+	case JumpOpConditionalFalseRegisterLink:
+	case JumpOpIfThenElseNormalPredTrue:
+	case JumpOpIfThenElseNormalPredFalse:
+	case JumpOpIfThenElseLinkPredTrue:
+	case JumpOpIfThenElseLinkPredFalse:
+	default:
+		return fmt.Errorf("Programmer failure! Report it as such!")
 	}
 }
