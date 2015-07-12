@@ -1,5 +1,0 @@
-package classic
-
-import (
-	"fmt"
-)
