@@ -1,8 +1,9 @@
 // declaration of the basic alu
-package iris2
+package standard
 
 import (
 	"fmt"
+	"github.com/DrItanium/cores/iris2"
 )
 
 const (
@@ -15,22 +16,20 @@ const (
 	aluTagUint32
 	aluTagInt64
 	aluTagUint64
-	aluTagFloat32
-	aluTagFloat64
 )
 
 type aluValue struct {
 	dataType byte
-	data     Word
+	data     iris2.Word
 }
 type Alu struct {
-	input            chan Packet
-	output           chan Packet
+	input            chan iris2.Packet
+	output           chan iris2.Packet
 	terminate        bool
 	internalRegister aluValue
 }
 
-func NewAlu() *Alu {
+func New() *Alu {
 	var a Alu
 	a.output = make(chan Packet)
 	a.input = make(chan Packet)
@@ -47,33 +46,33 @@ func (this *Alu) Terminate() {
 }
 
 const (
-	aluOpNop = iota
-	aluOpAdd
-	aluOpSub
-	aluOpMul
-	aluOpDiv
-	aluOpMod
-	aluOpShl
-	aluOpShr
-	aluOpAnd
-	aluOpOr
-	aluOpNot
-	aluOpXor
+	Nop = iota
+	Add
+	Sub
+	Mul
+	Div
+	Mod
+	Shl
+	Shr
+	And
+	Or
+	Not
+	Xor
 
 	maskAluGroup = 0x0F
 	maskAluFlags = 0xF0
 
-	aluSaveResultFlag = 0x1
-	aluFlag2          = 0x2
-	aluFlag3          = 0x4
-	aluFlag4          = 0x8
+	saveResultFlag = 0x1
+	flag2          = 0x2
+	flag3          = 0x4
+	flag4          = 0x8
 )
 
-func aluGroupMajor(value byte) byte {
+func groupMajor(value byte) byte {
 	return value & maskAluGroup
 }
 
-type aluFlags byte
+type flags byte
 
 func (this aluFlags) saveResult() bool {
 	return (this & aluSaveResultFlag) != 0
@@ -93,15 +92,24 @@ func getAluFlags(value byte) aluFlags {
 
 type aluOperation func(a, b, ret *aluValue) error
 
+func aluAdd(x, y, ret *aluValue) error {
+	return nil
+}
+
 var aluOperations = []aluOperation{
 	func(_, _, _ *aluValue) error { return nil }, // nop
-	func(a, b, ret *aluValue) error {
-		if a.dataType != b.dataType {
-
-		}
-		return nil
-	}, // add
+	aluAdd,
+	aluSub,
+	aluMul,
+	aluDiv,
+	aluMod,
+	aluShl,
+	aluShr,
+	aluAdd,
+	aluOr,
 }
+
+//func aluAdd8
 
 func (this *Alu) parseInput() {
 	for !this.terminate {
