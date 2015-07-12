@@ -186,15 +186,15 @@ func (this *Register) GetValueAs(valueType reflect.Type) (interface{}, error) {
 }
 
 const (
-	RegisterIP = iota
-	RegisterDataStack
-	RegisterCallStack
-	RegisterZeroValue
+	RegisterZeroValue = iota
 	RegisterOneValue
 	RegisterFloat32Zero
 	RegisterFloat32One
 	RegisterFloat64Zero
 	RegisterFloat64One
+	RegisterIP
+	RegisterDataStack
+	RegisterCallStack
 )
 
 type Packet struct {
@@ -207,8 +207,43 @@ type Device interface {
 	Terminate()
 }
 
-type RegisterFile [RegisterCount]Register
+const (
+	// DeviceTable layout
+	_alu = iota
+	_memoryController
+	_compareUnit
+	_branchUnit
+	_numberOfDevices
+
+	// register offsets
+	ZeroRegister = iota
+	OneRegister
+	InstructionPointer
+	StackPointer
+)
+
 type Core struct {
-	Registers RegisterFile
-	Devices   []Device
+	Registers [RegisterCount]Register
+	devices   [_numberOfDevices]Device
+}
+
+func NewCore(alu, memController, compareUnit, branchUnit Device) *Core {
+	var c Core
+	c.devices[_alu] = alu
+	c.devices[_memoryController] = memController
+	c.devices[_compareUnit] = compareUnit
+	c.devices[_branchUnit] = branchUnit
+	c.Registers[RegisterZeroValue].readonly = true
+	c.Registers[RegisterOneValue].readonly = true
+	c.Registers[RegisterOneValue].value = 1
+	c.Registers[RegisterFloat32Zero].readonly = true
+	c.Registers[RegisterFloat32Zero].value = Word(math.Float32bits(0.0))
+	c.Registers[RegisterFloat32One].readonly = true
+	c.Registers[RegisterFloat32One].value = Word(math.Float32bits(1.0))
+	c.Registers[RegisterFloat64Zero].readonly = true
+	c.Registers[RegisterFloat64Zero].value = Word(math.Float64bits(0.0))
+	c.Registers[RegisterFloat64One].readonly = true
+	c.Registers[RegisterFloat64One].value = Word(math.Float64bits(1.0))
+
+	return &c
 }
