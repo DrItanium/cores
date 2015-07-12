@@ -7,15 +7,17 @@ import (
 )
 
 const (
-	aluTagInternal = iota
-	aluTagByte
-	aluTagSbyte
-	aluTagInt16
-	aluTagUint16
-	aluTagInt32
-	aluTagUint32
-	aluTagInt64
-	aluTagUint64
+	tagInternal = iota
+	tagByte
+	tagSbyte
+	tagInt16
+	tagUint16
+	tagInt32
+	tagUint32
+	tagInt64
+	tagUint64
+
+	registerCount = 8
 )
 
 type aluValue struct {
@@ -26,13 +28,72 @@ type Alu struct {
 	input            chan iris2.Packet
 	output           chan iris2.Packet
 	terminate        bool
-	internalRegister aluValue
+	internalRegister [registerCount]aluValue
+}
+type argument struct {
+	dataType  byte
+	unsigned  bool
+	immediate bool
+	register  byte
+	data      []byte
+}
+
+var argSizeTable = []byte{1, 2, 4, 8}
+
+func newArgument(value []byte) (*argument, int, error) {
+	if len(value) == 0 {
+		return nil, 0, fmt.Errorf("No bytes to parse for argument!")
+	}
+	count := 1
+	first := value[0]
+	a := argument{
+		dataType:  first & 0x03,
+		unsigned:  ((first & 0x04) >> 2) != 0,
+		immediate: ((first & 0x08) >> 3) != 0,
+		register:  (first & 0xE0) >> 5,
+	}
+
+	if a.immediate {
+		if int(a.dataType) < len(argSizeTable) {
+			return nil, 0, fmt.Errorf("dataType set as %d", a.dataType)
+		}
+		num := argSizeTable[a.dataType]
+		a.data = make([]byte, num)
+		copy(a.data, value[1:1+num])
+		count += int(num)
+	}
+
+	return &a, count, nil
+}
+
+type instruction struct {
+	op   byte
+	args []*argument
+}
+
+func newInstruction(value []byte) (*instruction, error) {
+	if len(value) == 0 {
+		return nil, fmt.Errorf("No bytes to parse!")
+	} else {
+		var i instruction
+		i.op = value[0]
+		rest := value[1:]
+		for len(rest) > 0 {
+			arg, count, err := newArgument(rest)
+			if err != nil {
+				return nil, err
+			}
+			i.args = append(i.args, arg)
+			rest = rest[count:]
+		}
+		return &i, nil
+	}
 }
 
 func New() *Alu {
 	var a Alu
-	a.output = make(chan Packet)
-	a.input = make(chan Packet)
+	a.output = make(chan iris2.Packet)
+	a.input = make(chan iris2.Packet)
 	go a.parseInput()
 	return &a
 }
@@ -46,18 +107,18 @@ func (this *Alu) Terminate() {
 }
 
 const (
-	Nop = iota
-	Add
-	Sub
-	Mul
-	Div
-	Mod
-	Shl
-	Shr
-	And
-	Or
-	Not
-	Xor
+	nop = iota
+	add
+	sub
+	mul
+	div
+	mod
+	shl
+	shr
+	and
+	or
+	not
+	xor
 
 	maskAluGroup = 0x0F
 	maskAluFlags = 0xF0
@@ -74,67 +135,49 @@ func groupMajor(value byte) byte {
 
 type flags byte
 
-func (this aluFlags) saveResult() bool {
-	return (this & aluSaveResultFlag) != 0
+func (this flags) saveResult() bool {
+	return (this & saveResultFlag) != 0
 }
-func (this aluFlags) flag2() bool {
-	return ((this & aluFlag2) >> 1) != 0
+func (this flags) flag2() bool {
+	return ((this & flag2) >> 1) != 0
 }
-func (this aluFlags) flag3() bool {
-	return ((this & aluFlag3) >> 2) != 0
+func (this flags) flag3() bool {
+	return ((this & flag3) >> 2) != 0
 }
-func (this aluFlags) flag4() bool {
-	return ((this & aluFlag4) >> 3) != 0
+func (this flags) flag4() bool {
+	return ((this & flag4) >> 3) != 0
 }
-func getAluFlags(value byte) aluFlags {
-	return aluFlags((value & maskAluFlags) >> 4)
+func getAluFlags(value byte) flags {
+	return flags((value & maskAluFlags) >> 4)
 }
 
 type aluOperation func(a, b, ret *aluValue) error
-
-func aluAdd(x, y, ret *aluValue) error {
-	return nil
-}
-
-var aluOperations = []aluOperation{
-	func(_, _, _ *aluValue) error { return nil }, // nop
-	aluAdd,
-	aluSub,
-	aluMul,
-	aluDiv,
-	aluMod,
-	aluShl,
-	aluShr,
-	aluAdd,
-	aluOr,
-}
 
 //func aluAdd8
 
 func (this *Alu) parseInput() {
 	for !this.terminate {
-		var out Packet
+		var out iris2.Packet
 		input := <-this.input
 		if !input.HasData() {
 			out.Error = fmt.Errorf("alu: Command stream is empty")
 		} else {
-			op := aluGroupMajor(input.First())
+			op := groupMajor(input.First())
 			//flags := getAluFlags(input.First())
 			switch op {
-			case aluOpNop:
+			case nop:
 				// do nothing
-			case aluOpAdd:
-
-			case aluOpSub:
-			case aluOpMul:
-			case aluOpDiv:
-			case aluOpMod:
-			case aluOpShl:
-			case aluOpShr:
-			case aluOpAnd:
-			case aluOpOr:
-			case aluOpNot:
-			case aluOpXor:
+			case add:
+			case sub:
+			case mul:
+			case div:
+			case mod:
+			case shl:
+			case shr:
+			case and:
+			case or:
+			case not:
+			case xor:
 			default:
 				out.Error = fmt.Errorf("Illegal operation %d", op)
 			}
