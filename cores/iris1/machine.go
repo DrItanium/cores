@@ -1,5 +1,5 @@
 // machine description of iris1
-package classic
+package iris1
 
 import (
 	"fmt"
