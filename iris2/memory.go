@@ -67,10 +67,10 @@ const (
 )
 
 func groupMajor(this byte) byte {
-	return byte(this &^ memoryGroupMajorMask)
+	return byte(this & memoryGroupMajorMask)
 }
 func groupMinor(this byte) byte {
-	return byte((this &^ memoryGroupMinorMask) >> 2)
+	return byte((this & memoryGroupMinorMask) >> 2)
 }
 func (this *MemoryController) loadInstruction(address Word) []byte {
 	return this.rawLoad(address.asInstructionPointerAddress(), iPMaskEnd)
@@ -111,10 +111,10 @@ func (this *MemoryController) parseInput() {
 		p := <-this.input
 		var outPacket Packet
 		outPacket.Error = nil
-		streamLen := len(p.Value)
-		if streamLen == 0 {
+		if !p.HasData() {
 			outPacket.Error = fmt.Errorf("Memory controller: provided command input stream is empty!")
 		} else {
+			streamLen := len(p.Value)
 			cell := p.Value[0]
 			if streamLen == 1 {
 				switch groupMajor(cell) {
