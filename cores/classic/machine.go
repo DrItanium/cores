@@ -264,24 +264,8 @@ func (this *Core) SetDataMemory(address, value Word) error {
 	return nil
 }
 
-func (this *Core) Register(index byte) Word {
-	return this.backend.Register(index)
-}
-func (this *Core) SetRegister(index byte, value Word) error {
-	return this.backend.SetRegister(index, value)
-}
-func (this *Core) Push(value Word) {
-	this.backend.Push(value)
-}
-func (this *Core) Pop() Word {
-	return this.backend.Pop()
-}
-func (this *Core) Peek() Word {
-	return this.backend.Peek()
-}
-func New(backend Backend) (*Core, error) {
+func New() (*Core, error) {
 	var c Core
-	c.backend = backend
 	c.advancePc = true
 	c.terminateExecution = false
 	if err := c.SetRegister(InstructionPointer, 0); err != nil {
@@ -359,12 +343,6 @@ func (this *Core) ResumeExecution() {
 }
 func defaultExtendedUnit(core *Core, inst *DecodedInstruction) error {
 	return NewError(ErrorInvalidInstructionGroupProvided, uint(inst.Group))
-}
-func (this *Core) DataMemory(addr Word) Word {
-	return this.backend.DataMemory(addr)
-}
-func (this *Core) SetDataMemory(addr, value Word) error {
-	return this.backend.SetDataMemory(addr, value)
 }
 
 const (
@@ -464,21 +442,6 @@ const (
 	SystemCommandTerminate = iota
 	SystemCommandPanic     = 255
 )
-
-func New() (*Core, error) {
-	var b Backend
-	core, err := New(&b)
-	if err != nil {
-		return nil, err
-	}
-	if err0 := core.InstallExecutionUnit(InstructionGroupArithmetic, arithmetic); err0 != nil {
-		return nil, err0
-	}
-	if err0 := core.InstallExecutionUnit(InstructionGroupMove, move); err0 != nil {
-		return nil, err0
-	}
-	return core, nil
-}
 
 func arithmetic(core *Core, inst *DecodedInstruction) error {
 	if inst.Op >= ArithmeticOpCount {
@@ -646,7 +609,7 @@ func jumpUpdateLink(core *Core, link byte, next, target Word) error {
 	if err := core.SetRegister(link, next); err != nil {
 		return err
 	} else {
-		return core.SetRegister(iris.InstructionPointer, target)
+		return core.SetRegister(InstructionPointer, target)
 	}
 }
 func evalPredicate(value Word) bool {
@@ -662,34 +625,45 @@ func jump(core *Core, inst *DecodedInstruction) error {
 	case JumpOpUnconditionalImmediateLink:
 		dest := inst.Data[0]
 		imm := inst.Immediate()
-		next := core.Register(iris.InstructionPointer) + 1 // next instruction
+		next := core.Register(InstructionPointer) + 1 // next instruction
 		return jumpUpdateLink(core, dest, next, imm)
 	case JumpOpUnconditionalRegister:
 		target := inst.Data[0]
-		return core.SetRegister(iris.InstructionPointer, core.Register(target))
+		return core.SetRegister(InstructionPointer, core.Register(target))
 	case JumpOpUnconditionalRegisterLink:
 		link := inst.Data[0]
 		addr := inst.Data[1]
 		target := core.Register(addr)
-		next := core.Register(iris.InstructionPointer) + 1
+		next := core.Register(InstructionPointer) + 1
 		return jumpUpdateLink(core, link, next, target)
 	case JumpOpConditionalTrueImmediate:
 		if loadAndEvalPredicate(core, inst.Data[0]) {
-			return core.SetRegister(iris.InstructionPointer, inst.Immediate())
+			return core.SetRegister(InstructionPointer, inst.Immediate())
 		} else {
 			return nil
 		}
 	case JumpOpConditionalTrueImmediateLink:
+		return nil
 	case JumpOpConditionalTrueRegister:
+		return nil
 	case JumpOpConditionalTrueRegisterLink:
+		return nil
 	case JumpOpConditionalFalseImmediate:
+		return nil
 	case JumpOpConditionalFalseImmediateLink:
+		return nil
 	case JumpOpConditionalFalseRegister:
+		return nil
 	case JumpOpConditionalFalseRegisterLink:
+		return nil
 	case JumpOpIfThenElseNormalPredTrue:
+		return nil
 	case JumpOpIfThenElseNormalPredFalse:
+		return nil
 	case JumpOpIfThenElseLinkPredTrue:
+		return nil
 	case JumpOpIfThenElseLinkPredFalse:
+		return nil
 	default:
 		return fmt.Errorf("Programmer failure! Report it as such!")
 	}
