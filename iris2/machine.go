@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	IPMask = 0xFFFFFFFFF000000F // last four bits offset for instruction pointer
+	RegisterCount = 256
 
 	RegisterKindWord = iota
 	RegisterKindHalfWord
@@ -17,17 +17,27 @@ const (
 	RegisterKindBool
 	RegisterKindFloat32
 	RegisterKindFloat64
+	RegisterKindLast
+
+	MaxRegisterKinds      = 16
+	NumberOfRegisterKinds = MaxRegisterKinds - RegisterKindLast
 )
 
-type Cell byte
 type Word uint64
 
 type Register struct {
+	readonly  bool
 	unsigned  bool
 	valueType byte
 	value     Word
 }
 
+func (this *Register) Readonly() bool {
+	return this.readonly
+}
+func (this *Register) Unsigned() bool {
+	return this.unsigned
+}
 func (this *Register) Kind() byte {
 	return this.valueType
 }
@@ -38,71 +48,75 @@ func (this *Register) SetRawBits(value Word) {
 	this.value = value
 }
 func (this *Register) SetValue(value interface{}) error {
-	switch t := value.(type) {
-	case bool:
-		this.unsigned = false
-		this.valueType = RegisterKindBool
-		if value.(bool) {
-			this.value = 1
-		} else {
-			this.value = 0
+	if this.readonly {
+		return fmt.Errorf("Attempted to write to a readonly value")
+	} else {
+		switch t := value.(type) {
+		case bool:
+			this.unsigned = false
+			this.valueType = RegisterKindBool
+			if value.(bool) {
+				this.value = 1
+			} else {
+				this.value = 0
+			}
+		case int8:
+			this.value = Word(value.(int8))
+			this.unsigned = false
+			this.valueType = RegisterKindByte
+		case uint8:
+			this.value = Word(value.(uint8))
+			this.unsigned = true
+			this.valueType = RegisterKindByte
+		case int16:
+			this.unsigned = false
+			this.value = Word(value.(int16))
+			this.valueType = RegisterKindQuarterWord
+		case uint16:
+			this.unsigned = true
+			this.value = Word(value.(uint16))
+			this.valueType = RegisterKindQuarterWord
+		case int32:
+			this.unsigned = false
+			this.value = Word(value.(int32))
+			this.valueType = RegisterKindHalfWord
+		case uint32:
+			this.unsigned = true
+			this.value = Word(value.(uint32))
+			this.valueType = RegisterKindHalfWord
+		case int64:
+			this.unsigned = false
+			this.value = Word(value.(int64))
+			this.valueType = RegisterKindWord
+		case uint64:
+			this.unsigned = true
+			this.value = Word(value.(uint64))
+			this.valueType = RegisterKindWord
+		case int:
+			this.unsigned = false
+			this.valueType = RegisterKindWord
+			this.value = Word(value.(int))
+		case uint:
+			this.unsigned = true
+			this.valueType = RegisterKindWord
+			this.value = Word(value.(uint))
+		case Word:
+			this.unsigned = true
+			this.valueType = RegisterKindWord
+			this.value = value.(Word)
+		case float32:
+			this.unsigned = false
+			this.valueType = RegisterKindFloat32
+			this.value = Word(math.Float32bits(value.(float32)))
+		case float64:
+			this.unsigned = false
+			this.valueType = RegisterKindFloat64
+			this.value = Word(math.Float64bits(value.(float64)))
+		default:
+			return fmt.Errorf("Illegal value of type: %t", t)
 		}
-	case int8:
-		this.value = Word(value.(int8))
-		this.unsigned = false
-		this.valueType = RegisterKindByte
-	case uint8:
-		this.value = Word(value.(uint8))
-		this.unsigned = true
-		this.valueType = RegisterKindByte
-	case int16:
-		this.unsigned = false
-		this.value = Word(value.(int16))
-		this.valueType = RegisterKindQuarterWord
-	case uint16:
-		this.unsigned = true
-		this.value = Word(value.(uint16))
-		this.valueType = RegisterKindQuarterWord
-	case int32:
-		this.unsigned = false
-		this.value = Word(value.(int32))
-		this.valueType = RegisterKindHalfWord
-	case uint32:
-		this.unsigned = true
-		this.value = Word(value.(uint32))
-		this.valueType = RegisterKindHalfWord
-	case int64:
-		this.unsigned = false
-		this.value = Word(value.(int64))
-		this.valueType = RegisterKindWord
-	case uint64:
-		this.unsigned = true
-		this.value = Word(value.(uint64))
-		this.valueType = RegisterKindWord
-	case int:
-		this.unsigned = false
-		this.valueType = RegisterKindWord
-		this.value = Word(value.(int))
-	case uint:
-		this.unsigned = true
-		this.valueType = RegisterKindWord
-		this.value = Word(value.(uint))
-	case Word:
-		this.unsigned = true
-		this.valueType = RegisterKindWord
-		this.value = value.(Word)
-	case float32:
-		this.unsigned = false
-		this.valueType = RegisterKindFloat32
-		this.value = Word(math.Float32bits(value.(float32)))
-	case float64:
-		this.unsigned = false
-		this.valueType = RegisterKindFloat64
-		this.value = Word(math.Float64bits(value.(float64)))
-	default:
-		return fmt.Errorf("Illegal value of type: %t", t)
+		return nil
 	}
-	return nil
 }
 
 func (this *Register) GetValue() (interface{}, error) {
@@ -171,6 +185,30 @@ func (this *Register) GetValueAs(valueType reflect.Type) (interface{}, error) {
 	}
 }
 
-func MaskInstructionPointer(value Word) Word {
-	return value &^ IPMask
+const (
+	RegisterIP = iota
+	RegisterDataStack
+	RegisterCallStack
+	RegisterZeroValue
+	RegisterOneValue
+	RegisterFloat32Zero
+	RegisterFloat32One
+	RegisterFloat64Zero
+	RegisterFloat64One
+)
+
+type Packet struct {
+	Value []byte
+	Error error
+}
+
+type Device interface {
+	Send(value []byte) chan Packet
+	Terminate()
+}
+
+type RegisterFile [RegisterCount]Register
+type Core struct {
+	Registers RegisterFile
+	Devices   []Device
 }
