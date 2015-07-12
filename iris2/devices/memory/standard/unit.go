@@ -11,7 +11,7 @@ const (
 	iPMask         = 0xFFFFFFFFF000000F // last four bits offset for instruction pointer
 	iPMaskEnd      = 0x000000000000000F
 	memoryMask     = 0xFFFFFFFFF0000000
-	memoryCapacity = ^memoryMask
+	memoryCapacity = 0x000000000FFFFFFF
 
 	stackMask = 0xFFFFFFFFFF000000
 	stackSize = ^stackMask
@@ -40,8 +40,8 @@ func (this *MemoryController) Capacity() iris2.Word {
 }
 func NewMemoryController() (*MemoryController, error) {
 	var mc MemoryController
-	mc.output = make(chan Packet)
-	mc.input = make(chan Packet)
+	mc.output = make(chan iris2.Packet)
+	mc.input = make(chan iris2.Packet)
 	mc.terminated = false
 	go mc.parseInput()
 	return &mc, nil
@@ -77,10 +77,10 @@ func groupMinor(this byte) byte {
 	return byte((this & memoryGroupMinorMask) >> 2)
 }
 func (this *MemoryController) loadInstruction(address iris2.Word) []byte {
-	return this.rawLoad(address.asInstructionPointerAddress(), iPMaskEnd)
+	return this.rawLoad(asInstructionPointerAddress(address), iPMaskEnd)
 }
 func (this *MemoryController) loadData(address, count iris2.Word) []byte {
-	return this.rawLoad(address.asMemoryAddress(), count)
+	return this.rawLoad(asMemoryAddress(address), count)
 }
 func (this *MemoryController) rawLoad(address, count iris2.Word) []byte {
 	return this.memory[address : address+count]
@@ -92,18 +92,6 @@ func (this *MemoryController) storeValue(address iris2.Word, data []byte) {
 	}
 }
 
-func mctoByte(this []byte) byte {
-	return byte(this[0])
-}
-func mctoInt16(this []byte) uint16 {
-	return binary.LittleEndian.Uint16(this)
-}
-func mctoInt32(this []byte) uint32 {
-	return binary.LittleEndian.Uint32(this)
-}
-func mctoInt64(this []byte) uint64 {
-	return binary.LittleEndian.Uint64(this)
-}
 func toWord(this []byte) iris2.Word {
 	return iris2.Word(binary.LittleEndian.Uint64(this))
 }
@@ -135,7 +123,7 @@ func (this *MemoryController) parseInput() {
 				if len(args) < 8 {
 					outPacket.Error = fmt.Errorf("args is less than 8 bytes in length!")
 				} else {
-					address := mctoWord(args[:8])
+					address := toWord(args[:8])
 					rest := args[8:]
 
 					switch len(rest) {
@@ -170,8 +158,8 @@ func (this *MemoryController) parseInput() {
 	}
 }
 
-func (this *MemoryController) Send(value []byte) chan Packet {
-	var p Packet
+func (this *MemoryController) Send(value []byte) chan iris2.Packet {
+	var p iris2.Packet
 	p.Error = nil
 	p.Value = value
 	this.input <- p
