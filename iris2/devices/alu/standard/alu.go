@@ -3,6 +3,7 @@ package standard
 
 import (
 	"fmt"
+	"github.com/DrItanium/cores"
 	"github.com/DrItanium/cores/iris2"
 )
 
@@ -25,8 +26,8 @@ type aluValue struct {
 	data     iris2.Word
 }
 type Alu struct {
-	input            chan iris2.Packet
-	output           chan iris2.Packet
+	input            chan cores.Packet
+	output           chan cores.Packet
 	terminate        bool
 	internalRegister [registerCount]aluValue
 }
@@ -92,8 +93,8 @@ func newInstruction(value []byte) (*instruction, error) {
 
 func New() *Alu {
 	var a Alu
-	a.output = make(chan iris2.Packet)
-	a.input = make(chan iris2.Packet)
+	a.output = make(chan cores.Packet)
+	a.input = make(chan cores.Packet)
 	go a.parseInput()
 	return &a
 }
@@ -157,7 +158,7 @@ type aluOperation func(a, b, ret *aluValue) error
 
 func (this *Alu) parseInput() {
 	for !this.terminate {
-		var out iris2.Packet
+		var out cores.Packet
 		input := <-this.input
 		if !input.HasData() {
 			out.Error = fmt.Errorf("alu: Command stream is empty")

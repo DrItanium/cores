@@ -4,6 +4,7 @@ package standard
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/DrItanium/cores"
 	"github.com/DrItanium/cores/iris2"
 )
 
@@ -29,8 +30,8 @@ func asStackAddress(this iris2.Word) iris2.Word {
 }
 
 type MemoryController struct {
-	input      chan iris2.Packet
-	output     chan iris2.Packet
+	input      chan cores.Packet
+	output     chan cores.Packet
 	terminated bool
 	memory     [memoryCapacity]byte
 }
@@ -40,8 +41,8 @@ func (this *MemoryController) Capacity() iris2.Word {
 }
 func NewMemoryController() (*MemoryController, error) {
 	var mc MemoryController
-	mc.output = make(chan iris2.Packet)
-	mc.input = make(chan iris2.Packet)
+	mc.output = make(chan cores.Packet)
+	mc.input = make(chan cores.Packet)
 	mc.terminated = false
 	go mc.parseInput()
 	return &mc, nil
@@ -101,7 +102,7 @@ var sizeTranslationTable = []int{1, 2, 4, 8}
 func (this *MemoryController) parseInput() {
 	for !this.terminated {
 		p := <-this.input
-		var outPacket iris2.Packet
+		var outPacket cores.Packet
 		outPacket.Error = nil
 		if !p.HasData() {
 			outPacket.Error = fmt.Errorf("Memory controller: provided command input stream is empty!")
@@ -158,8 +159,8 @@ func (this *MemoryController) parseInput() {
 	}
 }
 
-func (this *MemoryController) Send(value []byte) chan iris2.Packet {
-	var p iris2.Packet
+func (this *MemoryController) Send(value []byte) chan cores.Packet {
+	var p cores.Packet
 	p.Error = nil
 	p.Value = value
 	this.input <- p
