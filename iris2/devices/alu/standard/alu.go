@@ -359,3 +359,10 @@ func (this *Alu) parseInput() {
 		this.output <- out
 	}
 }
+
+func (this *Alu) Send(value []byte) chan cores.Packet {
+	var a cores.Packet
+	a.Value = value
+	this.input <- a
+	return this.output
+}
