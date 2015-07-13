@@ -57,6 +57,32 @@ type Alu struct {
 	terminate bool
 	regs      [registerCount]aluValue
 }
+
+func (this *Alu) setRegister(index int, value iris2.Word) error {
+	if index >= registerCount {
+		return fmt.Errorf("Register at index %d is not a real register (alu has %d registers)!", index, registerCount)
+	} else {
+		switch this.regs[index].dataType {
+		case tagByte:
+			this.regs[index].data = iris2.Word(byte(value))
+		case tagInt16:
+			this.regs[index].data = iris2.Word(int16(value))
+		case tagInt32:
+			this.regs[index].data = iris2.Word(int32(value))
+		case tagInt64:
+			this.regs[index].data = value
+		}
+		return nil
+	}
+}
+func (this *Alu) getRegister(index int) ([]byte, error) {
+	if index >= registerCount {
+		return nil, fmt.Errorf("Register at index %d is not a real register (alu has %d registers)!", index, registerCount)
+	} else {
+		return this.regs[index].slice()
+	}
+}
+
 type argument struct {
 	dataType  byte
 	unsigned  bool
@@ -137,8 +163,7 @@ func (this *Alu) Terminate() {
 }
 
 const (
-	nop = iota
-	add
+	add = iota
 	sub
 	mul
 	div
@@ -149,6 +174,7 @@ const (
 	or
 	not
 	xor
+	nop
 	set
 	get
 	lastAluOp
@@ -161,21 +187,7 @@ func init() {
 	}
 }
 
-type aluOperation func(*Alu, *instruction) ([]byte, error)
-
-func (fn aluOperation) Invoke(alu *Alu, inst *instruction) ([]byte, error) {
-	return fn(alu, inst)
-}
-
 func (this *Alu) opset(inst *instruction) ([]byte, error) {
-	if !inst.hasArgs() {
-		return nil, fmt.Errorf("No arguments provided for the alu set operation!")
-	}
-	if len(inst.args) < 2 {
-		return nil, fmt.Errorf("Too few arguments provided to the alu set operation!")
-	} else if len(inst.args) > 2 {
-		return nil, fmt.Errorf("Too many arguments provided to the alu set operation!")
-	}
 	first := inst.args[0]
 	if first.immediate {
 		return nil, fmt.Errorf("The first argument provided to the alu set operation must be a register!")
@@ -195,50 +207,136 @@ func (this *Alu) opset(inst *instruction) ([]byte, error) {
 		reg.data = iris2.Word(binary.LittleEndian.Uint32(second.data))
 	case tagInt64:
 		reg.data = iris2.Word(binary.LittleEndian.Uint64(second.data))
-	default:
-		return nil, fmt.Errorf("Got an illegal alu tag type during set: %d", reg.dataType)
 	}
 	return []byte{}, nil
 }
 func (this *Alu) opget(inst *instruction) ([]byte, error) {
-	if !inst.hasArgs() {
-		return nil, fmt.Errorf("No arguments provided for the alu get operation!")
-	}
-	if inst.args[0].immediate {
+	first := inst.args[0]
+	if first.immediate {
 		return nil, fmt.Errorf("Getting an immediate does not make sense!")
 	}
 
-	if result, err1 := this.regs[inst.args[0].register].slice(); err1 != nil {
+	if result, err1 := this.getRegister(int(first.register)); err1 != nil {
 		return nil, err1
 	} else {
 		return result, nil
 	}
 }
 func (this *Alu) opnop(inst *instruction) ([]byte, error) {
-	if inst.hasArgs() {
-		return nil, fmt.Errorf("alu nop should have no arguments!")
+	return []byte{}, nil
+}
+
+type aluOperation struct {
+	name                string
+	requiresArguments   bool
+	numberOfArguments   int
+	customOperation     bool
+	secondArgCantBeZero bool
+	fn                  func(*Alu, *instruction) ([]byte, error)
+	binaryOp            binaryOperation
+}
+
+func (this *aluOperation) invoke(alu *Alu, inst *instruction) ([]byte, error) {
+	if this.requiresArguments {
+		if !inst.hasArgs() {
+			return nil, fmt.Errorf("Alu op %s requires arguments but none are given!", this.name)
+		} else if len(inst.args) != this.numberOfArguments {
+			return nil, fmt.Errorf("Alu op %s requires exactly %d arguments but %d are given!", this.name, this.numberOfArguments, len(inst.args))
+		}
 	} else {
-		return []byte{}, nil
+		if inst.hasArgs() {
+			return nil, fmt.Errorf("Alu op %s does not accept arguments but %d are given!", this.name, len(inst.args))
+		}
+	}
+	if this.customOperation {
+		return this.fn(alu, inst)
+	} else {
+		if this.numberOfArguments == 3 {
+			destination, src0, src1 := inst.args[0], inst.args[1], inst.args[2]
+			if destination.immediate {
+				return nil, fmt.Errorf("Destination is tagged as an immediate!")
+			} else if src0.immediate {
+				return nil, fmt.Errorf("Source0 is tagged as an immediate!")
+			} else if src1.immediate {
+				return nil, fmt.Errorf("Source1 is tagged as an immediate!")
+			} else if destination.register >= registerCount {
+				return nil, fmt.Errorf("destination's associated register index (%d) is greater than %d", destination.register, registerCount)
+			} else if src0.register >= registerCount {
+				return nil, fmt.Errorf("src0's associated register index (%d) is greater than %d", src0.register, registerCount)
+			} else if src1.register >= registerCount {
+				return nil, fmt.Errorf("src1's associated register index (%d) is greater than %d", src1.register, registerCount)
+			} else {
+				alu.regs[destination.register].dataType = destination.dataType
+				if d, s0, s1 := int(destination.register), alu.regs[src0.register].data, alu.regs[src1.register].data; this.secondArgCantBeZero && s1 == 0 {
+					return nil, fmt.Errorf("Attempted to divide by zero, op is %s", this.name)
+				} else if err0 := alu.setRegister(d, this.binaryOp(s0, s1)); err0 != nil {
+					return nil, err0
+				} else {
+					return []byte{}, nil
+				}
+			}
+		} else {
+			return nil, fmt.Errorf("non three argument operations must have a custom implementation!")
+		}
 	}
 }
 
-//func (this *Alu) opadd(inst *instruction) ([]byte,
+func (this *Alu) unpack2(inst *instruction) (int, iris2.Word, error) {
+	destination, src0 := inst.args[0], inst.args[1]
+	if destination.immediate {
+		return 0, 0, fmt.Errorf("Destination is tagged as an immediate!")
+	} else if src0.immediate {
+		return 0, 0, fmt.Errorf("Source0 is tagged as an immediate!")
+	} else if destination.register >= registerCount {
+		return 0, 0, fmt.Errorf("destination's associated register index (%d) is greater than %d", destination.register, registerCount)
+	} else if src0.register >= registerCount {
+		return 0, 0, fmt.Errorf("src0's associated register index (%d) is greater than %d", src0.register, registerCount)
+	} else {
+		this.regs[destination.register].dataType = destination.dataType
+		return int(destination.register), this.regs[src0.register].data, nil
+	}
 
-var lookupTable = []aluOperation{
-	(*Alu).opnop,
-	(*Alu).opnop,
-	(*Alu).opnop,
-	(*Alu).opnop,
-	(*Alu).opnop,
-	(*Alu).opnop,
-	(*Alu).opnop,
-	(*Alu).opnop,
-	(*Alu).opnop,
-	(*Alu).opnop,
-	(*Alu).opnop,
-	(*Alu).opnop,
-	(*Alu).opset,
-	(*Alu).opget,
+}
+
+type binaryOperation func(iris2.Word, iris2.Word) iris2.Word
+
+func (fn binaryOperation) invoke(x, y iris2.Word) iris2.Word {
+	return fn(x, y)
+}
+
+func (this *Alu) opnot(inst *instruction) ([]byte, error) {
+	if destination, src0, err := this.unpack2(inst); err != nil {
+		return nil, err
+	} else {
+		if err0 := this.setRegister(destination, ^src0); err0 != nil {
+			return nil, err0
+		} else {
+			return []byte{}, nil
+		}
+	}
+}
+
+var lookupTable = map[int]*aluOperation{
+	add: &aluOperation{"add", true, 3, false, false, nil, func(x, y iris2.Word) iris2.Word { return x + y }},
+	sub: &aluOperation{"sub", true, 3, false, false, nil, func(x, y iris2.Word) iris2.Word { return x - y }},
+	mul: &aluOperation{"mul", true, 3, false, false, nil, func(x, y iris2.Word) iris2.Word { return x * y }},
+	shl: &aluOperation{"shl", true, 3, false, false, nil, func(x, y iris2.Word) iris2.Word { return x << y }},
+	shr: &aluOperation{"shr", true, 3, false, false, nil, func(x, y iris2.Word) iris2.Word { return x >> y }},
+	and: &aluOperation{"and", true, 3, false, false, nil, func(x, y iris2.Word) iris2.Word { return x & y }},
+	or:  &aluOperation{"or", true, 3, false, false, nil, func(x, y iris2.Word) iris2.Word { return x | y }},
+	xor: &aluOperation{"xor", true, 3, false, false, nil, func(x, y iris2.Word) iris2.Word { return x ^ y }},
+	div: &aluOperation{"div", true, 3, false, true, nil, func(x, y iris2.Word) iris2.Word { return x / y }},
+	mod: &aluOperation{"mod", true, 3, false, true, nil, func(x, y iris2.Word) iris2.Word { return x % y }},
+	nop: &aluOperation{"nop", false, 0, true, false, (*Alu).opnop, nil},
+	not: &aluOperation{"not", true, 2, true, false, (*Alu).opnot, nil},
+	set: &aluOperation{"set", true, 1, true, false, (*Alu).opset, nil},
+	get: &aluOperation{"get", true, 2, true, false, (*Alu).opget, nil},
+}
+
+func init() {
+	if len(lookupTable) != lastAluOp {
+		panic(fmt.Errorf("Number of operations in dispatch table (%d) does not match number of defined operations (%d)", len(lookupTable), lastAluOp))
+	}
 }
 
 func (this *Alu) parseInput() {
@@ -254,7 +352,7 @@ func (this *Alu) parseInput() {
 				if inst.op >= lastAluOp {
 					out.Error = fmt.Errorf("Illegal operation %d", inst.op)
 				} else {
-					out.Value, out.Error = lookupTable[inst.op].Invoke(this, inst)
+					out.Value, out.Error = lookupTable[int(inst.op)].invoke(this, inst)
 				}
 			}
 		}
