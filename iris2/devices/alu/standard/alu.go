@@ -295,7 +295,6 @@ func (this *Alu) unpack2(inst *instruction) (int, iris2.Word, error) {
 		this.regs[destination.register].dataType = destination.dataType
 		return int(destination.register), this.regs[src0.register].data, nil
 	}
-
 }
 
 type binaryOperation func(iris2.Word, iris2.Word) iris2.Word
