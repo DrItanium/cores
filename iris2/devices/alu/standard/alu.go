@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/DrItanium/cores"
 	"github.com/DrItanium/cores/iris2"
+	"github.com/DrItanium/cores/manip"
 )
 
 const (
@@ -48,10 +49,10 @@ func newArgument(value []byte) (*argument, int, error) {
 	count := 1
 	first := value[0]
 	a := argument{
-		dataType:  byte(cores.Mask(first, 0x03, 0)),
-		unsigned:  cores.Mask(first, 0x04, 2) != 0,
-		immediate: cores.Mask(first, 0x08, 3) != 0,
-		register:  byte(cores.Mask(first, 0xE0, 5)),
+		dataType:  byte(manip.Mask8(first, 0x03, 0)),
+		unsigned:  manip.BitsSet8(first, 0x04, 2),
+		immediate: manip.BitsSet8(first, 0x08, 3),
+		register:  byte(manip.Mask8(first, 0xE0, 5)),
 	}
 
 	if a.immediate {
@@ -137,19 +138,19 @@ func groupMajor(value byte) byte {
 type flags byte
 
 func (this flags) saveResult() bool {
-	return manip.BitsSet(this, saveResult, 0)
+	return manip.BitsSet8(byte(this), saveResultFlag, 0)
 }
 func (this flags) flag2() bool {
-	return manip.BitsSet(this, flag2, 1)
+	return manip.BitsSet8(byte(this), flag2, 1)
 }
 func (this flags) flag3() bool {
-	return manip.BitsSet(this, flag3, 2)
+	return manip.BitsSet8(byte(this), flag3, 2)
 }
 func (this flags) flag4() bool {
-	return manip.BitsSet(this, flag4, 3)
+	return manip.BitsSet8(byte(this), flag4, 3)
 }
 func getAluFlags(value byte) flags {
-	return flags(manip.Mask(value, maskAluFlags, 4))
+	return flags(manip.Mask8(value, maskAluFlags, 4))
 }
 
 type aluOperation func(a, b, ret *aluValue) error
