@@ -48,10 +48,10 @@ func newArgument(value []byte) (*argument, int, error) {
 	count := 1
 	first := value[0]
 	a := argument{
-		dataType:  first & 0x03,
-		unsigned:  ((first & 0x04) >> 2) != 0,
-		immediate: ((first & 0x08) >> 3) != 0,
-		register:  (first & 0xE0) >> 5,
+		dataType:  byte(cores.Mask(first, 0x03, 0)),
+		unsigned:  cores.Mask(first, 0x04, 2) != 0,
+		immediate: cores.Mask(first, 0x08, 3) != 0,
+		register:  byte(cores.Mask(first, 0xE0, 5)),
 	}
 
 	if a.immediate {
@@ -137,19 +137,19 @@ func groupMajor(value byte) byte {
 type flags byte
 
 func (this flags) saveResult() bool {
-	return (this & saveResultFlag) != 0
+	return manip.BitsSet(this, saveResult, 0)
 }
 func (this flags) flag2() bool {
-	return ((this & flag2) >> 1) != 0
+	return manip.BitsSet(this, flag2, 1)
 }
 func (this flags) flag3() bool {
-	return ((this & flag3) >> 2) != 0
+	return manip.BitsSet(this, flag3, 2)
 }
 func (this flags) flag4() bool {
-	return ((this & flag4) >> 3) != 0
+	return manip.BitsSet(this, flag4, 3)
 }
 func getAluFlags(value byte) flags {
-	return flags((value & maskAluFlags) >> 4)
+	return flags(manip.Mask(value, maskAluFlags, 4))
 }
 
 type aluOperation func(a, b, ret *aluValue) error
