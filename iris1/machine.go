@@ -652,7 +652,7 @@ func swapRegMem(core *Core, inst *DecodedInstruction) error {
 	return swapMemoryAndRegister(core, dest, core.Register(dest), addr, core.DataMemory(addr))
 }
 func moveOpSet(core *Core, inst *DecodedInstruction) error {
-	dest = inst.Data[0]
+	dest := inst.Data[0]
 	return core.SetRegister(dest, inst.Immediate())
 }
 func swapAddrMem(core *Core, inst *DecodedInstruction) error {
