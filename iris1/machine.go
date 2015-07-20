@@ -346,56 +346,6 @@ func defaultExtendedUnit(core *Core, inst *DecodedInstruction) error {
 }
 
 const (
-	InstructionGroupArithmetic = iota
-	InstructionGroupMove
-	InstructionGroupJump
-	InstructionGroupCompare
-	InstructionGroupMisc
-	// arithmetic operations
-	ArithmeticOpAdd = iota
-	ArithmeticOpSub
-	ArithmeticOpMul
-	ArithmeticOpDiv
-	ArithmeticOpRem
-	ArithmeticOpShiftLeft
-	ArithmeticOpShiftRight
-	ArithmeticOpBinaryAnd
-	ArithmeticOpBinaryOr
-	ArithmeticOpBinaryNot
-	ArithmeticOpBinaryXor
-	ArithmeticOpIncrement
-	ArithmeticOpDecrement
-	ArithmeticOpDouble
-	ArithmeticOpHalve
-	ArithmeticOpAddImmediate
-	ArithmeticOpSubImmediate
-	ArithmeticOpMulImmediate
-	ArithmeticOpDivImmediate
-	ArithmeticOpRemImmediate
-	ArithmeticOpShiftLeftImmediate
-	ArithmeticOpShiftRightImmediate
-	// always last
-	ArithmeticOpCount
-	// Move Operations
-	MoveOpMove = iota
-	MoveOpSwap
-	MoveOpSwapRegAddr
-	MoveOpSwapAddrAddr
-	MoveOpSwapRegMem
-	MoveOpSwapAddrMem
-	MoveOpSet
-	MoveOpLoad
-	MoveOpLoadMem
-	MoveOpStore
-	MoveOpStoreAddr
-	MoveOpStoreMem
-	MoveOpStoreImm
-	MoveOpPush
-	MoveOpPushImmediate
-	MoveOpPop
-	MoveOpPeek
-	// always last
-	MoveOpCount
 	// Jump Operations
 	JumpOpUnconditionalImmediate = iota
 	JumpOpUnconditionalImmediateLink
@@ -445,6 +395,38 @@ const (
 	// System commands
 	SystemCommandTerminate = iota
 	SystemCommandPanic     = 255
+)
+const (
+	InstructionGroupArithmetic = iota
+	InstructionGroupMove
+	InstructionGroupJump
+	InstructionGroupCompare
+	InstructionGroupMisc
+	// arithmetic operations
+	ArithmeticOpAdd = iota
+	ArithmeticOpSub
+	ArithmeticOpMul
+	ArithmeticOpDiv
+	ArithmeticOpRem
+	ArithmeticOpShiftLeft
+	ArithmeticOpShiftRight
+	ArithmeticOpBinaryAnd
+	ArithmeticOpBinaryOr
+	ArithmeticOpBinaryNot
+	ArithmeticOpBinaryXor
+	ArithmeticOpIncrement
+	ArithmeticOpDecrement
+	ArithmeticOpDouble
+	ArithmeticOpHalve
+	ArithmeticOpAddImmediate
+	ArithmeticOpSubImmediate
+	ArithmeticOpMulImmediate
+	ArithmeticOpDivImmediate
+	ArithmeticOpRemImmediate
+	ArithmeticOpShiftLeftImmediate
+	ArithmeticOpShiftRightImmediate
+	// always last
+	ArithmeticOpCount
 )
 
 var unimplementedBinaryOp = func(a, b Word) (Word, error) { return 0, fmt.Errorf("Operation not implemented!") }
@@ -560,6 +542,90 @@ func swapMemoryAndRegister(core *Core, reg byte, data0, addr, data1 Word) error 
 		return nil
 	}
 }
+
+const (
+	// Move Operations
+	MoveOpMove = iota
+	MoveOpSwap
+	MoveOpSwapRegAddr
+	MoveOpSwapAddrAddr
+	MoveOpSwapRegMem
+	MoveOpSwapAddrMem
+	MoveOpSet
+	MoveOpLoad
+	MoveOpLoadMem
+	MoveOpStore
+	MoveOpStoreAddr
+	MoveOpStoreMem
+	MoveOpStoreImm
+	MoveOpPush
+	MoveOpPushImmediate
+	MoveOpPop
+	MoveOpPeek
+	// always last
+	MoveOpCount
+)
+
+type MoveOp func(*Core, *DecodedInstruction) error
+
+func (fn MoveOp) Invoke(core *Core, inst *DecodedInstruction) error {
+	return fn(core, inst)
+
+}
+
+var unimplementedMoveOp = func(_ *Core, _ *DecodedInstruction) error { return fmt.Errorf("Unimplemented move operation!") }
+var moveTable [32]MoveOp
+
+func init() {
+	if MoveOpCount > 32 {
+		panic("Too many move operations registered! Programmer Failure!")
+	} else {
+		for i := 0; i < 32; i++ {
+			moveTable[i] = unimplementedMoveOp
+		}
+		moveTable[MoveOpMove] = func(core *Core, inst *DecodedInstruction) error {
+			dest := inst.Data[0]
+			src0 := inst.Data[1]
+			return core.SetRegister(dest, core.Register(src0))
+		}
+		moveTable[MoveOpSwap] = func(core *Core, inst *DecodedInstruction) error {
+			dest := inst.Data[0]
+			src0 := inst.Data[1]
+			r0 := core.Register(dest)
+			r1 := core.Register(src0)
+			if err := core.SetRegister(src0, r0); err != nil {
+				return err
+			}
+			if err := core.SetRegister(dest, r1); err != nil {
+				return err
+			}
+			return nil
+		}
+		moveTable[MoveOpSwapRegAddr] = func(core *Core, inst *DecodedInstruction) error {
+			dest := inst.Data[0]
+			src0 := inst.Data[1]
+			reg := core.Register(dest)
+			memaddr := core.Register(src0)
+			memcontents := core.DataMemory(memaddr)
+			return swapMemoryAndRegister(core, dest, reg, memaddr, memcontents)
+		}
+		moveTable[MoveOpSwapAddrAddr] = func(core *Core, inst *DecodedInstruction) error {
+			dest := inst.Data[0]
+			src0 := inst.Data[1]
+			addr0 := core.Register(dest)
+			addr1 := core.Register(src0)
+			mem0 := core.DataMemory(addr0)
+			mem1 := core.DataMemory(addr1)
+			return swapMemory(core, addr0, mem0, addr1, mem1)
+		}
+		moveTable[MoveOpSwapRegMem] = func(core *Core, inst *DecodedInstruction) error {
+			dest := inst.Data[0]
+			addr := inst.Immediate()
+			return swapMemoryAndRegister(core, dest, core.Register(dest), addr, core.DataMemory(addr))
+		}
+	}
+}
+
 func move(core *Core, inst *DecodedInstruction) error {
 	if inst.Op >= MoveOpCount {
 		return fmt.Errorf("Op index %d is not a valid move operation", inst.Op)
