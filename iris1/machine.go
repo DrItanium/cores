@@ -365,51 +365,6 @@ func defaultExtendedUnit(core *Core, inst *DecodedInstruction) error {
 }
 
 const (
-	// Jump Operations
-	JumpOpUnconditionalImmediate = iota
-	JumpOpUnconditionalImmediateCall
-	JumpOpUnconditionalRegister
-	JumpOpUnconditionalRegisterCall
-	JumpOpConditionalTrueImmediate
-	JumpOpConditionalTrueImmediateCall
-	JumpOpConditionalTrueRegister
-	JumpOpConditionalTrueRegisterCall
-	JumpOpConditionalFalseImmediate
-	JumpOpConditionalFalseImmediateCall
-	JumpOpConditionalFalseRegister
-	JumpOpConditionalFalseRegisterCall
-	JumpOpIfThenElseNormalPredTrue
-	JumpOpIfThenElseNormalPredFalse
-	JumpOpIfThenElseCallPredTrue
-	JumpOpIfThenElseCallPredFalse
-	JumpOpReturn
-	// always last
-	JumpOpCount
-	// Compare operations
-	CompareOpEq = iota
-	CompareOpEqAnd
-	CompareOpEqOr
-	CompareOpEqXor
-	CompareOpNeq
-	CompareOpNeqAnd
-	CompareOpNeqOr
-	CompareOpNeqXor
-	CompareOpLessThan
-	CompareOpLessThanAnd
-	CompareOpLessThanOr
-	CompareOpLessThanXor
-	CompareOpGreaterThan
-	CompareOpGreaterThanAnd
-	CompareOpGreaterThanOr
-	CompareOpGreaterThanXor
-	CompareOpLessThanOrEqualTo
-	CompareOpLessThanOrEqualToAnd
-	CompareOpLessThanOrEqualToOr
-	CompareOpLessThanOrEqualToXor
-	CompareOpGreaterThanOrEqualTo
-	CompareOpGreaterThanOrEqualToAnd
-	CompareOpGreaterThanOrEqualToOr
-	CompareOpGreaterThanOrEqualToXor
 	// Misc operations
 	MiscOpSystemCall = iota
 	// System commands

@@ -2,6 +2,29 @@ package iris1
 
 import "fmt"
 
+const (
+	// Jump Operations
+	JumpOpUnconditionalImmediate = iota
+	JumpOpUnconditionalImmediateCall
+	JumpOpUnconditionalRegister
+	JumpOpUnconditionalRegisterCall
+	JumpOpConditionalTrueImmediate
+	JumpOpConditionalTrueImmediateCall
+	JumpOpConditionalTrueRegister
+	JumpOpConditionalTrueRegisterCall
+	JumpOpConditionalFalseImmediate
+	JumpOpConditionalFalseImmediateCall
+	JumpOpConditionalFalseRegister
+	JumpOpConditionalFalseRegisterCall
+	JumpOpIfThenElseNormalPredTrue
+	JumpOpIfThenElseNormalPredFalse
+	JumpOpIfThenElseCallPredTrue
+	JumpOpIfThenElseCallPredFalse
+	JumpOpReturn
+	// always last
+	JumpOpCount
+)
+
 func branch(core *Core, addr Word, call bool) error {
 	if call {
 		return core.Call(addr)
