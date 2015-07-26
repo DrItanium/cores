@@ -1,9 +1,26 @@
 // move related operations
 package iris1
 
-import (
-	"fmt"
-)
+import "fmt"
+
+func swapMemory(core *Core, addr0, data0, addr1, data1 Word) error {
+	if err := core.SetDataMemory(addr0, data1); err != nil {
+		return err
+	} else if err := core.SetDataMemory(addr1, data0); err != nil {
+		return err
+	} else {
+		return nil
+	}
+}
+func swapMemoryAndRegister(core *Core, reg byte, data0, addr, data1 Word) error {
+	if err := core.SetRegister(reg, data1); err != nil {
+		return err
+	} else if err := core.SetDataMemory(addr, data0); err != nil {
+		return err
+	} else {
+		return nil
+	}
+}
 
 const (
 	// Move Operations
