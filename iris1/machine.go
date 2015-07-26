@@ -10,13 +10,14 @@ const (
 	MemorySize               = 65536
 	MajorOperationGroupCount = 8
 	SystemCallCount          = 256
-	FalseRegister            = iota
+
+	FalseRegister = iota
 	TrueRegister
 	InstructionPointer
 	StackPointer
 	PredicateRegister
 	CountRegister
-	LinkRegister
+	CallPointer
 	UserRegisterBegin
 	// groups
 	// Error codes
@@ -182,10 +183,11 @@ type Core struct {
 	code  [MemorySize]Instruction
 	data  [MemorySize]Word
 	stack [MemorySize]Word
+	call  [MemorySize]Word
 	// internal registers that should be easy to find
 	instructionPointer Word
 	stackPointer       Word
-	link               Word
+	callPointer        Word
 	count              Word
 	predicate          Word
 	advancePc          bool
@@ -208,8 +210,8 @@ func (this *Core) SetRegister(index byte, value Word) error {
 		this.predicate = value
 	case CountRegister:
 		this.count = value
-	case LinkRegister:
-		this.link = value
+	case CallPointer:
+		this.callPointer = value
 	default:
 		this.gpr[index-UserRegisterBegin] = value
 	}
@@ -227,10 +229,10 @@ func (this *Core) Register(index byte) Word {
 		return this.stackPointer
 	case PredicateRegister:
 		return this.predicate
-	case LinkRegister:
-		return this.link
 	case CountRegister:
 		return this.count
+	case CallPointer:
+		return this.callPointer
 	default:
 		// do the offset calculation
 		return this.gpr[index-UserRegisterBegin]
@@ -243,6 +245,16 @@ func (this *Core) CodeMemory(address Word) Instruction {
 func (this *Core) SetCodeMemory(address Word, value Instruction) error {
 	this.code[address] = value
 	return nil
+}
+func (this *Core) Call(addr Word) error {
+	this.callPointer++
+	this.call[this.callPointer] = this.NextInstructionAddress()
+	return this.SetRegister(InstructionPointer, addr)
+}
+func (this *Core) Return() Word {
+	value := this.call[this.callPointer]
+	this.callPointer--
+	return value
 }
 func (this *Core) Push(value Word) {
 	this.stackPointer++
@@ -277,7 +289,7 @@ func New() (*Core, error) {
 	if err := c.SetRegister(StackPointer, 0xFFFF); err != nil {
 		return nil, err
 	}
-	if err := c.SetRegister(LinkRegister, 0); err != nil {
+	if err := c.SetRegister(CallPointer, 0xFFFF); err != nil {
 		return nil, err
 	}
 	if err := c.SetRegister(CountRegister, 0); err != nil {
@@ -348,21 +360,22 @@ func defaultExtendedUnit(core *Core, inst *DecodedInstruction) error {
 const (
 	// Jump Operations
 	JumpOpUnconditionalImmediate = iota
-	JumpOpUnconditionalImmediateLink
+	JumpOpUnconditionalImmediateCall
 	JumpOpUnconditionalRegister
-	JumpOpUnconditionalRegisterLink
+	JumpOpUnconditionalRegisterCall
 	JumpOpConditionalTrueImmediate
-	JumpOpConditionalTrueImmediateLink
+	JumpOpConditionalTrueImmediateCall
 	JumpOpConditionalTrueRegister
-	JumpOpConditionalTrueRegisterLink
+	JumpOpConditionalTrueRegisterCall
 	JumpOpConditionalFalseImmediate
-	JumpOpConditionalFalseImmediateLink
+	JumpOpConditionalFalseImmediateCall
 	JumpOpConditionalFalseRegister
-	JumpOpConditionalFalseRegisterLink
+	JumpOpConditionalFalseRegisterCall
 	JumpOpIfThenElseNormalPredTrue
 	JumpOpIfThenElseNormalPredFalse
-	JumpOpIfThenElseLinkPredTrue
-	JumpOpIfThenElseLinkPredFalse
+	JumpOpIfThenElseCallPredTrue
+	JumpOpIfThenElseCallPredFalse
+	JumpOpReturn
 	// always last
 	JumpOpCount
 	// Compare operations
@@ -714,66 +727,118 @@ func moveOpPeek(core *Core, inst *DecodedInstruction) error {
 func move(core *Core, inst *DecodedInstruction) error {
 	return moveTable[inst.Op].Invoke(core, inst)
 }
-func jumpUpdateLink(core *Core, link byte, next, target Word) error {
-	if err := core.SetRegister(link, next); err != nil {
-		return err
+
+func branch(core *Core, addr Word, call bool) error {
+	if call {
+		return core.Call(addr)
 	} else {
-		return core.SetRegister(InstructionPointer, target)
+		return core.SetRegister(InstructionPointer, addr)
 	}
 }
-func evalPredicate(value Word) bool {
-	return value != 0
+func selectNextAddress(core *Core, cond bool, onTrue, onFalse Word, call bool) error {
+	core.advancePc = false
+	var next Word
+	if cond {
+		next = onTrue
+	} else {
+		next = onFalse
+	}
+	return branch(core, next, call)
 }
-func loadAndEvalPredicate(core *Core, index byte) bool {
-	return evalPredicate(core.Register(index))
+func conditionalJump(core *Core, cond bool, onTrue Word, call bool) error {
+	return selectNextAddress(core, cond, onTrue, core.Register(InstructionPointer)+1, call)
 }
+func unconditionalJump(core *Core, addr Word, call bool) error {
+	return branch(core, addr, call)
+}
+func (this *Core) InstructionAddress() Word {
+	return this.Register(InstructionPointer)
+}
+func (this *Core) NextInstructionAddress() Word {
+	return this.Register(InstructionPointer) + 1
+}
+func (this *Core) PredicateValue(index byte) bool {
+	return this.Register(index) != 0
+}
+func undefinedJumpFunction(core *Core, inst *DecodedInstruction) error {
+	return fmt.Errorf("Illegal jump operation!")
+}
+
+var jumpFunctions = [32]func(core *Core, inst *DecodedInstruction) error{
+	func(core *Core, inst *DecodedInstruction) error { // branch immediate
+		return unconditionalJump(core, inst.Immediate(), false)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // call immediate
+		return unconditionalJump(core, inst.Immediate(), true)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // branch register
+		return unconditionalJump(core, core.Register(inst.Data[0]), false)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // call register
+		return unconditionalJump(core, core.Register(inst.Data[0]), true)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // conditional branch immediate
+		return conditionalJump(core, core.PredicateValue(inst.Data[0]), inst.Immediate(), false)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // conditional call immediate
+		return conditionalJump(core, core.PredicateValue(inst.Data[0]), inst.Immediate(), true)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // conditional branch register
+		return conditionalJump(core, core.PredicateValue(inst.Data[0]), core.Register(inst.Data[1]), false)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // conditional call register
+		return conditionalJump(core, core.PredicateValue(inst.Data[0]), core.Register(inst.Data[1]), true)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // conditional branch immediate (false)
+		return conditionalJump(core, !core.PredicateValue(inst.Data[0]), inst.Immediate(), false)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // conditional call immediate (false)
+		return conditionalJump(core, !core.PredicateValue(inst.Data[0]), inst.Immediate(), true)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // conditional branch register (false)
+		return conditionalJump(core, !core.PredicateValue(inst.Data[0]), core.Register(inst.Data[1]), false)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // conditional call register (false)
+		return conditionalJump(core, !core.PredicateValue(inst.Data[0]), core.Register(inst.Data[1]), true)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // if then else branch pred true
+		return selectNextAddress(core, core.PredicateValue(inst.Data[0]), core.Register(inst.Data[1]), core.Register(inst.Data[2]), false)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // if then else branch pred false
+		return selectNextAddress(core, !core.PredicateValue(inst.Data[0]), core.Register(inst.Data[1]), core.Register(inst.Data[2]), false)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // if then else call pred true
+		return selectNextAddress(core, core.PredicateValue(inst.Data[0]), core.Register(inst.Data[1]), core.Register(inst.Data[2]), true)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // if then else call pred false
+		return selectNextAddress(core, !core.PredicateValue(inst.Data[0]), core.Register(inst.Data[1]), core.Register(inst.Data[2]), true)
+	},
+	func(core *Core, inst *DecodedInstruction) error { // return
+		return branch(core, core.Return(), false)
+	},
+	undefinedJumpFunction,
+	undefinedJumpFunction,
+	undefinedJumpFunction,
+	undefinedJumpFunction,
+	undefinedJumpFunction,
+	undefinedJumpFunction,
+	undefinedJumpFunction,
+	undefinedJumpFunction,
+	undefinedJumpFunction,
+	undefinedJumpFunction,
+	undefinedJumpFunction,
+	undefinedJumpFunction,
+	undefinedJumpFunction,
+	undefinedJumpFunction,
+	undefinedJumpFunction,
+}
+
+func init() {
+	if JumpOpCount > 32 {
+		panic("Too many jump operations defined!")
+	}
+}
+
 func jump(core *Core, inst *DecodedInstruction) error {
-	switch inst.Op {
-	case JumpOpUnconditionalImmediate:
-		return core.SetRegister(InstructionPointer, inst.Immediate())
-	case JumpOpUnconditionalImmediateLink:
-		dest := inst.Data[0]
-		imm := inst.Immediate()
-		next := core.Register(InstructionPointer) + 1 // next instruction
-		return jumpUpdateLink(core, dest, next, imm)
-	case JumpOpUnconditionalRegister:
-		target := inst.Data[0]
-		return core.SetRegister(InstructionPointer, core.Register(target))
-	case JumpOpUnconditionalRegisterLink:
-		link := inst.Data[0]
-		addr := inst.Data[1]
-		target := core.Register(addr)
-		next := core.Register(InstructionPointer) + 1
-		return jumpUpdateLink(core, link, next, target)
-	case JumpOpConditionalTrueImmediate:
-		if loadAndEvalPredicate(core, inst.Data[0]) {
-			return core.SetRegister(InstructionPointer, inst.Immediate())
-		} else {
-			return nil
-		}
-	case JumpOpConditionalTrueImmediateLink:
-		return nil
-	case JumpOpConditionalTrueRegister:
-		return nil
-	case JumpOpConditionalTrueRegisterLink:
-		return nil
-	case JumpOpConditionalFalseImmediate:
-		return nil
-	case JumpOpConditionalFalseImmediateLink:
-		return nil
-	case JumpOpConditionalFalseRegister:
-		return nil
-	case JumpOpConditionalFalseRegisterLink:
-		return nil
-	case JumpOpIfThenElseNormalPredTrue:
-		return nil
-	case JumpOpIfThenElseNormalPredFalse:
-		return nil
-	case JumpOpIfThenElseLinkPredTrue:
-		return nil
-	case JumpOpIfThenElseLinkPredFalse:
-		return nil
-	default:
-		return fmt.Errorf("Programmer failure! Report it as such!")
-	}
+	return jumpFunctions[inst.Op](core, inst)
 }
