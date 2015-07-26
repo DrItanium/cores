@@ -364,14 +364,6 @@ func defaultExtendedUnit(core *Core, inst *DecodedInstruction) error {
 	return NewError(ErrorInvalidInstructionGroupProvided, uint(inst.Group))
 }
 
-const (
-	// Misc operations
-	MiscOpSystemCall = iota
-	// System commands
-	SystemCommandTerminate = iota
-	SystemCommandPanic     = 255
-)
-
 func (this *Core) InstructionAddress() Word {
 	return this.Register(InstructionPointer)
 }
