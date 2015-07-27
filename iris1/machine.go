@@ -10,7 +10,9 @@ const (
 	MemorySize               = 65536
 	MajorOperationGroupCount = 8
 	SystemCallCount          = 256
-
+)
+const (
+	// reserved registers
 	FalseRegister = iota
 	TrueRegister
 	InstructionPointer
@@ -19,7 +21,9 @@ const (
 	CountRegister
 	CallPointer
 	UserRegisterBegin
-	// groups
+)
+
+const (
 	// Error codes
 	ErrorNone = iota
 	ErrorPanic
@@ -37,7 +41,8 @@ const (
 	ErrorEncodeByteOutOfRange
 	ErrorGroupValueOutOfRange
 	ErrorOpValueOutOfRange
-
+)
+const (
 	// Instruction groups
 	InstructionGroupArithmetic = iota
 	InstructionGroupMove
@@ -283,6 +288,17 @@ func (this *Core) SetDataMemory(address, value Word) error {
 	return nil
 }
 
+var defaultExecutionUnits = []struct {
+	Group byte
+	Unit  ExecutionUnit
+}{
+	{Group: InstructionGroupArithmetic, Unit: arithmetic},
+	{Group: InstructionGroupMove, Unit: move},
+	{Group: InstructionGroupJump, Unit: jump},
+	{Group: InstructionGroupCompare, Unit: compare},
+	{Group: InstructionGroupMisc, Unit: misc},
+}
+
 func New() (*Core, error) {
 	var c Core
 	c.advancePc = true
@@ -304,6 +320,11 @@ func New() (*Core, error) {
 	}
 	for i := 0; i < MajorOperationGroupCount; i++ {
 		if err := c.InstallExecutionUnit(byte(i), defaultExtendedUnit); err != nil {
+			return nil, err
+		}
+	}
+	for _, unit := range defaultExecutionUnits {
+		if err := c.InstallExecutionUnit(unit.Group, unit.Unit); err != nil {
 			return nil, err
 		}
 	}
