@@ -56,6 +56,7 @@ func loadMemoryImage(core *iris1.Core, path string) error {
 		count, err0 := file.Read(storage)
 		if err0 != nil {
 			if count == 0 && err0 == io.EOF {
+				// we hit the end of the file so try and process it
 				return installMemoryImage(core, storage)
 			} else {
 				return err0
