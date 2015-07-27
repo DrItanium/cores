@@ -41,16 +41,14 @@ func (this *ArithmeticOp) Invoke(first, second Word) (Word, error) {
 	return this.fn(first, second)
 
 }
-func basicDivOperation(a, b Word, fn func(Word, Word) Word) (Word, error) {
-	if b == 0 {
-		return 0, fmt.Errorf("Divide by zero error!")
-	} else {
-		return fn(a, b), nil
-	}
-}
+
+const (
+	DivideByZeroMessage = "Divide by zero error!"
+)
+
 func div(a, b Word) (Word, error) {
 	if b == 0 {
-		return 0, fmt.Errorf("Divide by zero error!")
+		return 0, fmt.Errorf(DivideByZeroMessage)
 	} else if b == 1 {
 		return a, nil
 	} else {
@@ -59,7 +57,7 @@ func div(a, b Word) (Word, error) {
 }
 func rem(a, b Word) (Word, error) {
 	if b == 0 {
-		return 0, fmt.Errorf("Divide by zero error!")
+		return 0, fmt.Errorf(DivideByZeroMessage)
 	} else if b == 1 {
 		return 0, nil
 	} else {
@@ -119,4 +117,11 @@ func arithmetic(core *Core, inst *DecodedInstruction) error {
 	} else {
 		return core.SetRegister(dest, result)
 	}
+}
+
+func NewDecodedInstructionArithmetic(op, data0, data1, data2 byte) (*DecodedInstruction, error) {
+	return NewDecodedInstruction(InstructionGroupArithmetic, op, data0, data1, data2)
+}
+func NewDecodedInstructionImmediateArithmetic(op, data0 byte, imm Word) (*DecodedInstruction, error) {
+	return NewDecodedInstructionImmediate(InstructionGroupArithmetic, op, data0, imm)
 }
