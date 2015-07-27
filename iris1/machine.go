@@ -362,7 +362,7 @@ func (this *Core) Dispatch(inst Instruction) error {
 	if di, err := inst.Decode(); err != nil {
 		return err
 	} else {
-		return this.InvokeExecution(di)
+		return this.Invoke(di)
 	}
 }
 func terminateSystemCall(core *Core, inst *DecodedInstruction) error {
@@ -416,4 +416,17 @@ func NewDecodedInstruction(group, op, data0, data1, data2 byte) (*DecodedInstruc
 }
 func NewDecodedInstructionImmediate(group, op, data0 byte, imm Word) (*DecodedInstruction, error) {
 	return NewDecodedInstruction(group, op, data0, byte(imm), byte(imm>>8))
+}
+
+const (
+	// System commands
+	SystemCallTerminate = iota
+	SystemCallPanic
+	NumberOfSystemCalls
+)
+
+func init() {
+	if NumberOfSystemCalls > 256 {
+		panic("Too many system commands defined!")
+	}
 }

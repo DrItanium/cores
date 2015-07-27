@@ -7,12 +7,6 @@ const (
 	MiscOpSystemCall = iota
 	NumberOfMiscOperations
 )
-const (
-	// System commands
-	SystemCallTerminate = iota
-	SystemCallPanic
-	NumberOfSystemCalls
-)
 
 type miscOpFunc func(*Core, *DecodedInstruction) error
 
@@ -29,13 +23,10 @@ func init() {
 	if NumberOfMiscOperations > 32 {
 		panic("Too many misc operations defined!")
 	}
-	if NumberOfSystemCalls > 256 {
-		panic("Too many system commands defined!")
-	}
 	for i := 0; i < 32; i++ {
 		miscOps[i] = badMiscOp
 	}
-	miscOps[MiscOpSystemCall] = SystemCall
+	miscOps[MiscOpSystemCall] = (*Core).SystemCall
 }
 
 func misc(core *Core, inst *DecodedInstruction) error {
