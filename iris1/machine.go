@@ -434,3 +434,22 @@ func init() {
 func (this *Core) TerminateExecution() bool {
 	return this.terminateExecution
 }
+
+func (this *Core) CurrentInstruction() Instruction {
+	return this.code[this.Register(InstructionPointer)]
+}
+
+func (this *Core) AdvanceProgramCounter() error {
+	if this.advancePc {
+		if err := this.SetRegister(InstructionPointer, this.NextInstructionAddress()); err != nil {
+			return err
+		}
+	} else {
+		this.advancePc = true
+	}
+	return nil
+}
+
+func (this *Core) ExecuteCurrentInstruction() error {
+	return this.Dispatch(this.CurrentInstruction())
+}
