@@ -430,3 +430,7 @@ func init() {
 		panic("Too many system commands defined!")
 	}
 }
+
+func (this *Core) TerminateExecution() bool {
+	return this.terminateExecution
+}
