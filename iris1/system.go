@@ -9,9 +9,9 @@ const (
 )
 const (
 	// System commands
-	SystemCommandTerminate = iota
-	SystemCommandPanic
-	SystemCommandCount
+	SystemCallTerminate = iota
+	SystemCallPanic
+	NumberOfSystemCalls
 )
 
 type miscOpFunc func(*Core, *DecodedInstruction) error
@@ -29,26 +29,15 @@ func init() {
 	if NumberOfMiscOperations > 32 {
 		panic("Too many misc operations defined!")
 	}
-	if SystemCommandCount > 256 {
+	if NumberOfSystemCalls > 256 {
 		panic("Too many system commands defined!")
 	}
 	for i := 0; i < 32; i++ {
 		miscOps[i] = badMiscOp
 	}
-	miscOps[MiscOpSystemCall] = systemCall
+	miscOps[MiscOpSystemCall] = SystemCall
 }
 
 func misc(core *Core, inst *DecodedInstruction) error {
 	return miscOps[inst.Op].Invoke(core, inst)
-}
-func systemCall(core *Core, inst *DecodedInstruction) error {
-	switch inst.Data[0] {
-	case SystemCommandTerminate:
-		core.terminateExecution = true
-	case SystemCommandPanic:
-		// this is a special case that I haven't implemented yet
-	default:
-		return fmt.Errorf("Illegal signal %d", inst.Data[0])
-	}
-	return nil
 }

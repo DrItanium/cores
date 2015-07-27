@@ -333,6 +333,8 @@ func New() (*Core, error) {
 			return nil, err
 		}
 	}
+	c.InstallSystemCall(SystemCallTerminate, terminateSystemCall)
+	c.InstallSystemCall(SystemCallPanic, panicSystemCall)
 	return &c, nil
 }
 
@@ -344,7 +346,7 @@ func (this *Core) InstallExecutionUnit(group byte, fn ExecutionUnit) error {
 		return nil
 	}
 }
-func (this *Core) InvokeExecution(inst *DecodedInstruction) error {
+func (this *Core) Invoke(inst *DecodedInstruction) error {
 	return this.groups[inst.Group](this, inst)
 }
 func (this *Core) InstallSystemCall(offset byte, fn SystemCall) error {
@@ -362,6 +364,10 @@ func (this *Core) Dispatch(inst Instruction) error {
 	} else {
 		return this.InvokeExecution(di)
 	}
+}
+func terminateSystemCall(core *Core, inst *DecodedInstruction) error {
+	core.terminateExecution = true
+	return nil
 }
 func panicSystemCall(core *Core, inst *DecodedInstruction) error {
 	// we don't want to panic the program itself but generate a new error
