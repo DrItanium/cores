@@ -394,3 +394,20 @@ func (this *Core) NextInstructionAddress() Word {
 func (this *Core) PredicateValue(index byte) bool {
 	return this.Register(index) != 0
 }
+
+func NewDecodedInstruction(group, op, data0, data1, data2 byte) (*DecodedInstruction, error) {
+	if group >= MajorOperationGroupCount {
+		return nil, fmt.Errorf("Provided group (%d) is out of range!", group)
+	} else {
+		var di DecodedInstruction
+		di.Group = group
+		di.Op = op
+		di.Data[0] = data0
+		di.Data[1] = data1
+		di.Data[2] = data2
+		return &di, nil
+	}
+}
+func NewDecodedInstructionImmediate(group, op, data0 byte, imm Word) (*DecodedInstruction, error) {
+	return NewDecodedInstruction(group, op, data0, byte(imm), byte(imm>>8))
+}
