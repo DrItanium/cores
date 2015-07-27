@@ -6,13 +6,15 @@ import (
 	"flag"
 	"fmt"
 	"github.com/DrItanium/cores/iris1"
+	"io"
+	"os"
 )
 
 func main() {
 	flag.Parse()
 	if len(flag.Args()) != 1 {
 		flag.Usage()
-		fmt.Println("No input files provided!")
+		fmt.Println("Only one input file accepted!")
 	} else {
 		if core, err := iris1.New(); err != nil {
 			fmt.Printf("ERROR: couldn't create a new iris1 core: %s\n", err)
@@ -22,12 +24,16 @@ func main() {
 			fmt.Printf("ERROR: execution failed of termination setup instruction: %s\n", err)
 		} else {
 			// install the program
-			for !core.TerminateExecution() {
-				// read the current instruction
-				if err := core.ExecuteCurrentInstruction(); err != nil {
-					fmt.Printf("ERROR during execution: %s\n", err)
-				} else if err := core.AdvanceProgramCounter(); err != nil {
-					fmt.Printf("ERROR during the advancement of the program counter: %s", err)
+			if err := loadMemoryImage(core, flag.Args()[0]); err != nil {
+				fmt.Printf("ERROR: couldn't load memory image: %s", err)
+			} else {
+				for !core.TerminateExecution() {
+					// read the current instruction
+					if err := core.ExecuteCurrentInstruction(); err != nil {
+						fmt.Printf("ERROR during execution: %s\n", err)
+					} else if err := core.AdvanceProgramCounter(); err != nil {
+						fmt.Printf("ERROR during the advancement of the program counter: %s", err)
+					}
 				}
 			}
 		}
@@ -41,6 +47,29 @@ const (
 	ImageSize             = InstructionMemorySize + DataMemorySize
 )
 
+func loadMemoryImage(core *iris1.Core, path string) error {
+	if file, err := os.Open(path); err != nil {
+		return err
+	} else {
+		defer file.Close()
+		storage := make([]byte, ImageSize)
+		count, err0 := file.Read(storage)
+		if err0 != nil {
+			if count == 0 && err0 == io.EOF {
+				return installMemoryImage(core, storage)
+			} else {
+				return err0
+			}
+		} else {
+			if count < ImageSize {
+				return fmt.Errorf("File at %s is not a complete memory image, only read %d bytes!", path, count)
+			} else {
+				// we read enough cells
+				return installMemoryImage(core, storage)
+			}
+		}
+	}
+}
 func installMemoryImage(core *iris1.Core, img []byte) error {
 	if len(img) != ImageSize {
 		return fmt.Errorf("provided image size is not %d", ImageSize)
