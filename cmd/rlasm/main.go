@@ -121,6 +121,7 @@ func (this *Node) parseRegister(val string) error {
 			j := err.(*strconv.NumError)
 			if j.Err == strconv.ErrSyntax {
 				this.Type = TypeSymbol
+				return nil
 			} else {
 				return InvalidRegister(val)
 			}
@@ -130,8 +131,8 @@ func (this *Node) parseRegister(val string) error {
 	} else {
 		this.Type = TypeRegister
 		this.Value = v
+		return nil
 	}
-	return nil
 }
 func (this *Node) parseHexImmediate(val string) error {
 	this.Type = TypeHexImmediate
@@ -139,8 +140,8 @@ func (this *Node) parseHexImmediate(val string) error {
 		return err
 	} else {
 		this.Value = v
+		return nil
 	}
-	return nil
 }
 func (this *Node) parseBinaryImmediate(val string) error {
 	this.Type = TypeBinaryImmediate
@@ -148,8 +149,17 @@ func (this *Node) parseBinaryImmediate(val string) error {
 		return err
 	} else {
 		this.Value = v
+		return nil
 	}
-	return nil
+}
+func (this *Node) parseImmediate(val string) error {
+	this.Type = TypeImmediate
+	if v, err := parseDecimalImmediate(val[1:]); err != nil {
+		return err
+	} else {
+		this.Value = v
+		return nil
+	}
 }
 func (this *Node) Parse() error {
 	if this.Type == TypeUnknown {
@@ -165,10 +175,12 @@ func (this *Node) Parse() error {
 			this.Value = strings.TrimPrefix(val, ";")
 		} else if strings.HasPrefix(val, "r") {
 			return this.parseRegister(val)
-		} else if strings.HasPrefix(val, "0x") {
+		} else if strings.HasPrefix(val, "#x") {
 			return this.parseHexImmediate(val)
-		} else if strings.HasPrefix(val, "0b") {
+		} else if strings.HasPrefix(val, "#b") {
 			return this.parseBinaryImmediate(val)
+		} else if strings.HasPrefix(val, "#") {
+			return this.parseImmediate(val)
 		}
 	}
 	return nil
