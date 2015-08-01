@@ -61,16 +61,19 @@ func (this *Node) NeedsAnalysis() bool {
 
 type Statement []Node
 
+func (this *Statement) Add(value string, t NodeType) {
+	// always trim before adding
+	str := strings.TrimSpace(value)
+	if len(str) > 0 {
+		*this = append(*this, Node{Value: str, Type: t})
+	}
+}
+func (this *Statement) AddUnknown(value string) {
+	this.Add(value, TypeUnknown)
+}
+
 func carveLine(line string) Statement {
 	// trim the damn line first
-	captureSequence := func(nodes Statement, dat string, from, to int) Statement {
-		str := strings.TrimSpace(dat[from:to])
-		if len(str) > 0 {
-			return append(nodes, Node{Value: str, Type: TypeUnknown})
-		} else {
-			return nodes
-		}
-	}
 	data := strings.TrimSpace(line)
 	var s Statement
 	if len(data) == 0 {
@@ -83,21 +86,21 @@ func carveLine(line string) Statement {
 		var r rune
 		r, width = utf8.DecodeRuneInString(data[start:])
 		if unicode.IsSpace(r) {
-			s = captureSequence(s, data, oldStart, start)
+			s.AddUnknown(data[oldStart:start])
 			oldStart = start
 		} else if r == '=' {
-			s = captureSequence(s, data, oldStart, start)
-			s = append(s, Node{Value: "=", Type: TypeEquals})
+			s.AddUnknown(data[oldStart:start])
+			s.Add("=", TypeEquals)
 			oldStart = start + width
 		} else if r == ',' {
-			s = captureSequence(s, data, oldStart, start)
-			s = append(s, Node{Value: ",", Type: TypeComma})
+			s.AddUnknown(data[oldStart:start])
+			s.Add(",", TypeComma)
 			oldStart = start + width
 		} else if r == ';' {
 			// consume the rest of the data
-			s = captureSequence(s, data, oldStart, start)
+			s.AddUnknown(data[oldStart:start])
 			// then capture the comment
-			s = append(s, Node{Value: data[start:], Type: TypeComment})
+			s.Add(data[start:], TypeComment)
 			oldStart = start
 			break
 		}
