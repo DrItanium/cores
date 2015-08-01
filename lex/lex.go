@@ -2,8 +2,8 @@
 package lex
 
 import (
+	"bufio"
 	"fmt"
-	"text/scanner"
 )
 
 type Node struct {
@@ -13,7 +13,7 @@ type Node struct {
 
 type Translator func(string) ([]Node, error)
 
-func (this Translator) Translate(input *scanner.Scanner) ([]Node, error) {
+func (this Translator) Translate(input *bufio.Scanner) ([]Node, error) {
 	var nodes []Node
 	for input.Scan() {
 		nodes := append(nodes, this(input.Text())...)
