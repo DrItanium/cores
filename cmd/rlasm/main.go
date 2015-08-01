@@ -113,6 +113,44 @@ func (this *Node) parseLabel(val string) error {
 	}
 	return nil
 }
+func (this *Node) parseRegister(val string) error {
+	// convert this to a byte
+	if v, err := parseRegisterValue(val[1:]); err != nil {
+		switch err.(type) {
+		case *strconv.NumError:
+			j := err.(*strconv.NumError)
+			if j.Err == strconv.ErrSyntax {
+				this.Type = TypeSymbol
+			} else {
+				return InvalidRegister(val)
+			}
+		default:
+			return err
+		}
+	} else {
+		this.Type = TypeRegister
+		this.Value = v
+	}
+	return nil
+}
+func (this *Node) parseHexImmediate(val string) error {
+	this.Type = TypeHexImmediate
+	if v, err := parseHexImmediate(val[2:]); err != nil {
+		return err
+	} else {
+		this.Value = v
+	}
+	return nil
+}
+func (this *Node) parseBinaryImmediate(val string) error {
+	this.Type = TypeBinaryImmediate
+	if v, err := parseBinaryImmediate(val[2:]); err != nil {
+		return err
+	} else {
+		this.Value = v
+	}
+	return nil
+}
 func (this *Node) Parse() error {
 	if this.Type == TypeUnknown {
 		val := this.Value.(string)
@@ -126,37 +164,11 @@ func (this *Node) Parse() error {
 			this.Type = TypeComma
 			this.Value = strings.TrimPrefix(val, ";")
 		} else if strings.HasPrefix(val, "r") {
-			// convert this to a byte
-			if v, err := parseRegisterValue(val[1:]); err != nil {
-				switch err.(type) {
-				case *strconv.NumError:
-					j := err.(*strconv.NumError)
-					if j.Err == strconv.ErrSyntax {
-						this.Type = TypeSymbol
-					} else {
-						return InvalidRegister(val)
-					}
-				default:
-					return err
-				}
-			} else {
-				this.Type = TypeRegister
-				this.Value = v
-			}
+			return this.parseRegister(val)
 		} else if strings.HasPrefix(val, "0x") {
-			this.Type = TypeHexImmediate
-			if v, err := parseHexImmediate(val[2:]); err != nil {
-				return err
-			} else {
-				this.Value = v
-			}
+			return this.parseHexImmediate(val)
 		} else if strings.HasPrefix(val, "0b") {
-			this.Type = TypeBinaryImmediate
-			if v, err := parseBinaryImmediate(val[2:]); err != nil {
-				return err
-			} else {
-				this.Value = v
-			}
+			return this.parseBinaryImmediate(val)
 		}
 	}
 	return nil
