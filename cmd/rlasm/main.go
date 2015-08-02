@@ -98,6 +98,9 @@ func (this *Node) parseLabel(val string) error {
 				j := err.(*strconv.NumError)
 				if j.Err == strconv.ErrRange {
 					return fmt.Errorf("Label %s is interpreted as an out of range value! This is not allowed as it is ambiguous!", this.Value)
+				} else if j.Err == strconv.ErrSyntax {
+					// probably legal, will require an extra pass most likely
+					return nil
 				} else {
 					return err
 				}
@@ -107,31 +110,9 @@ func (this *Node) parseLabel(val string) error {
 			default:
 				return fmt.Errorf("Unkown error occurred: %s! Programmer failure!", err)
 			}
-		} else if nod.Type == TypeRegister {
-			return fmt.Errorf("Label %s has the same name as register %s. This is not allowed!", this.Value)
+		} else {
+			return nil
 		}
-	}
-	return nil
-}
-func (this *Node) parseRegister(val string) error {
-	// convert this to a byte
-	if v, err := parseRegisterValue(val[1:]); err != nil {
-		switch err.(type) {
-		case *strconv.NumError:
-			j := err.(*strconv.NumError)
-			if j.Err == strconv.ErrSyntax {
-				this.Type = TypeSymbol
-				return nil
-			} else {
-				return InvalidRegister(val)
-			}
-		default:
-			return err
-		}
-	} else {
-		this.Type = TypeRegister
-		this.Value = v
-		return nil
 	}
 }
 func (this *Node) parseHexImmediate(val string) error {
@@ -173,14 +154,14 @@ func (this *Node) Parse() error {
 		} else if strings.HasPrefix(val, ";") {
 			this.Type = TypeComma
 			this.Value = strings.TrimPrefix(val, ";")
-		} else if strings.HasPrefix(val, "r") {
-			return this.parseRegister(val)
 		} else if strings.HasPrefix(val, "#x") {
 			return this.parseHexImmediate(val)
 		} else if strings.HasPrefix(val, "#b") {
 			return this.parseBinaryImmediate(val)
 		} else if strings.HasPrefix(val, "#") {
 			return this.parseImmediate(val)
+		} else {
+
 		}
 	}
 	return nil
