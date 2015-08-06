@@ -1,0 +1,9 @@
+(addi r32 r41 128)
+(add r32 r41 r128)
+(label target)
+(lt r0 r1 r32 r33) ; donuts are tasty
+(label donuts)
+(plus target r32 rotate)
+; add r1202 = r10234, 32768
+(label r1000)
+(op r100 r100 r100)
