@@ -94,7 +94,24 @@ func (this Instruction) register(index int) (byte, error) {
 		return 0, fmt.Errorf("Register index: %d is out of range!", index)
 	}
 }
-
+func NewEncodedInstruction(group, op, dest, src0, src1 byte) *Instruction {
+	// fuse group and op together
+	var inst Instruction
+	inst.setGroup(group)
+	inst.setOp(op)
+	_ = inst.setByte(1, dest)
+	_ = inst.setByte(2, src0)
+	_ = inst.setByte(3, src1)
+	return &inst
+}
+func NewEncodedImmediateInstruction(group, op, dest byte, imm Word) *Instruction {
+	var inst Instruction
+	inst.setGroup(group)
+	inst.setOp(op)
+	_ = inst.setByte(1, dest)
+	inst.setImmediate(imm)
+	return &inst
+}
 func (this Instruction) immediate() Word {
 	return Word((this & 0xFFFF0000) >> 16)
 }
