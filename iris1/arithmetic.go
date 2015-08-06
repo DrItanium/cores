@@ -34,11 +34,11 @@ var unimplementedBinaryOp = func(a, b Word) (Word, error) { return 0, fmt.Errorf
 
 type ArithmeticOp struct {
 	ImmediateForm bool
-	fn            func(Word, Word) (Word, error)
+	Fn            func(Word, Word) (Word, error)
 }
 
 func (this *ArithmeticOp) Invoke(first, second Word) (Word, error) {
-	return this.fn(first, second)
+	return this.Fn(first, second)
 
 }
 
@@ -65,39 +65,47 @@ func rem(a, b Word) (Word, error) {
 	}
 }
 
-var arithmeticOps [32]ArithmeticOp
+var unimplementedArithmeticOp = ArithmeticOp{
+	ImmediateForm: false,
+	Fn:            unimplementedBinaryOp,
+}
+var arithmeticOps = [31]ArithmeticOp{
+	ArithmeticOp{false, func(a, b Word) (Word, error) { return a + b, nil }},  // add
+	ArithmeticOp{false, func(a, b Word) (Word, error) { return a - b, nil }},  // sub
+	ArithmeticOp{false, func(a, b Word) (Word, error) { return a * b, nil }},  // mul
+	ArithmeticOp{false, div},                                                  // divide
+	ArithmeticOp{false, rem},                                                  // remainder
+	ArithmeticOp{false, func(a, b Word) (Word, error) { return a << b, nil }}, // shift left
+	ArithmeticOp{false, func(a, b Word) (Word, error) { return a >> b, nil }}, // shift right
+	ArithmeticOp{false, func(a, b Word) (Word, error) { return a & b, nil }},  // binary and
+	ArithmeticOp{false, func(a, b Word) (Word, error) { return a | b, nil }},  // binary or
+	ArithmeticOp{false, func(a, _ Word) (Word, error) { return ^a, nil }},     // unary not
+	ArithmeticOp{false, func(a, b Word) (Word, error) { return a ^ b, nil }},  // binary xor
+	ArithmeticOp{false, func(a, _ Word) (Word, error) { return a + 1, nil }},  // increment
+	ArithmeticOp{false, func(a, _ Word) (Word, error) { return a - 1, nil }},  // decrement
+	ArithmeticOp{false, func(a, _ Word) (Word, error) { return a + a, nil }},  // double
+	ArithmeticOp{false, func(a, _ Word) (Word, error) { return a / 2, nil }},  // halve
+	ArithmeticOp{true, func(a, b Word) (Word, error) { return a + b, nil }},   // immediate form of add
+	ArithmeticOp{true, func(a, b Word) (Word, error) { return a - b, nil }},   // immediate form of sub
+	ArithmeticOp{true, func(a, b Word) (Word, error) { return a * b, nil }},   // immediate form of mul
+	ArithmeticOp{true, div},                                                   // immediate form of div
+	ArithmeticOp{true, rem},                                                   // immediate form of rem
+	ArithmeticOp{true, func(a, b Word) (Word, error) { return a << b, nil }},  // immediate form of shift left
+	ArithmeticOp{true, func(a, b Word) (Word, error) { return a >> b, nil }},  // immediate form of shift right
+	unimplementedArithmeticOp,
+	unimplementedArithmeticOp,
+	unimplementedArithmeticOp,
+	unimplementedArithmeticOp,
+	unimplementedArithmeticOp,
+	unimplementedArithmeticOp,
+	unimplementedArithmeticOp,
+	unimplementedArithmeticOp,
+	unimplementedArithmeticOp,
+}
 
 func init() {
 	if ArithmeticOpCount > 32 {
 		panic("Too many arithmetic operations defined! Programmer failure!")
-	} else {
-		for i := 0; i < 32; i++ {
-			arithmeticOps[i].ImmediateForm = false
-			arithmeticOps[i].fn = unimplementedBinaryOp
-		}
-		// setup the table itself
-		arithmeticOps[ArithmeticOpAdd].fn = func(a, b Word) (Word, error) { return a + b, nil }                                                                          // add
-		arithmeticOps[ArithmeticOpSub].fn = func(a, b Word) (Word, error) { return a - b, nil }                                                                          // sub
-		arithmeticOps[ArithmeticOpMul].fn = func(a, b Word) (Word, error) { return a * b, nil }                                                                          // mul
-		arithmeticOps[ArithmeticOpDiv].fn = div                                                                                                                          // divide
-		arithmeticOps[ArithmeticOpRem].fn = rem                                                                                                                          // remainder
-		arithmeticOps[ArithmeticOpShiftLeft].fn = func(a, b Word) (Word, error) { return a << b, nil }                                                                   // shift left
-		arithmeticOps[ArithmeticOpShiftRight].fn = func(a, b Word) (Word, error) { return a >> b, nil }                                                                  // shift right
-		arithmeticOps[ArithmeticOpBinaryAnd].fn = func(a, b Word) (Word, error) { return a & b, nil }                                                                    // binary and
-		arithmeticOps[ArithmeticOpBinaryOr].fn = func(a, b Word) (Word, error) { return a | b, nil }                                                                     // binary or
-		arithmeticOps[ArithmeticOpBinaryNot].fn = func(a, _ Word) (Word, error) { return ^a, nil }                                                                       // unary not
-		arithmeticOps[ArithmeticOpBinaryXor].fn = func(a, b Word) (Word, error) { return a ^ b, nil }                                                                    // binary xor
-		arithmeticOps[ArithmeticOpIncrement].fn = func(a, _ Word) (Word, error) { return arithmeticOps[ArithmeticOpAdd].Invoke(a, 1) }                                   // increment
-		arithmeticOps[ArithmeticOpDecrement].fn = func(a, _ Word) (Word, error) { return arithmeticOps[ArithmeticOpSub].Invoke(a, 1) }                                   // decrement
-		arithmeticOps[ArithmeticOpDouble].fn = func(a, _ Word) (Word, error) { return arithmeticOps[ArithmeticOpAdd].Invoke(a, a) }                                      // double
-		arithmeticOps[ArithmeticOpHalve].fn = func(a, _ Word) (Word, error) { return arithmeticOps[ArithmeticOpDiv].Invoke(a, 2) }                                       // halve
-		arithmeticOps[ArithmeticOpAddImmediate] = ArithmeticOp{true, func(a, b Word) (Word, error) { return arithmeticOps[ArithmeticOpAdd].Invoke(a, b) }}               // immediate form of add
-		arithmeticOps[ArithmeticOpSubImmediate] = ArithmeticOp{true, func(a, b Word) (Word, error) { return arithmeticOps[ArithmeticOpSub].Invoke(a, b) }}               // immediate form of sub
-		arithmeticOps[ArithmeticOpMulImmediate] = ArithmeticOp{true, func(a, b Word) (Word, error) { return arithmeticOps[ArithmeticOpMul].Invoke(a, b) }}               // immediate form of mul
-		arithmeticOps[ArithmeticOpDivImmediate] = ArithmeticOp{true, func(a, b Word) (Word, error) { return arithmeticOps[ArithmeticOpDiv].Invoke(a, b) }}               // immediate form of div
-		arithmeticOps[ArithmeticOpRemImmediate] = ArithmeticOp{true, func(a, b Word) (Word, error) { return arithmeticOps[ArithmeticOpRem].Invoke(a, b) }}               // immediate form of rem
-		arithmeticOps[ArithmeticOpShiftLeftImmediate] = ArithmeticOp{true, func(a, b Word) (Word, error) { return arithmeticOps[ArithmeticOpShiftLeft].Invoke(a, b) }}   // immediate form of shift left
-		arithmeticOps[ArithmeticOpShiftRightImmediate] = ArithmeticOp{true, func(a, b Word) (Word, error) { return arithmeticOps[ArithmeticOpShiftRight].Invoke(a, b) }} // immediate form of shift right
 	}
 }
 func arithmetic(core *Core, inst *DecodedInstruction) error {
