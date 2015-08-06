@@ -26,19 +26,12 @@ func (this Atom) String() string {
 type List []interface{}
 
 func (this List) String() string {
-	out := "("
-	for _, val := range this {
-		switch val.(type) {
-		case List:
-			l := val.(List)
-			out += l.String()
-		default:
-			out += fmt.Sprintf("%s ", val)
-		}
+	strs := make([]string, len(this))
+	for ind, val := range this {
+		strs[ind] = fmt.Sprintf("%s", val)
 	}
-	out = strings.TrimSpace(out)
-	out += ")"
-	return out
+	str := strings.Join(strs, " ")
+	return fmt.Sprintf("(%s)", str)
 }
 func New(buf *bufio.Reader) (List, error) {
 	var l List
@@ -52,14 +45,18 @@ func New(buf *bufio.Reader) (List, error) {
 				l = append(l, val)
 			}
 		case ')':
-			nContainer := make(Atom, len(container))
-			copy(nContainer, container)
-			l = append(l, nContainer)
+			if len(container) > 0 {
+				nContainer := make(Atom, len(container))
+				copy(nContainer, container)
+				l = append(l, nContainer)
+			}
 			return l, nil
 		case ' ', '\n', '\t':
-			nContainer := make(Atom, len(container))
-			copy(nContainer, container)
-			l = append(l, nContainer)
+			if len(container) > 0 {
+				nContainer := make(Atom, len(container))
+				copy(nContainer, container)
+				l = append(l, nContainer)
+			}
 			container = make(Atom, 0)
 		case ';':
 			// read the rest of the line
