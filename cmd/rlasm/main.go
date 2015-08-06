@@ -40,8 +40,6 @@ func (this List) String() string {
 	out += ")"
 	return out
 }
-func consumeComment(buf *bufio.Reader) {
-}
 func New(buf *bufio.Reader) (List, error) {
 	var l List
 	var container Atom
