@@ -126,10 +126,3 @@ func arithmetic(core *Core, inst *DecodedInstruction) error {
 		return core.SetRegister(dest, result)
 	}
 }
-
-func NewDecodedInstructionArithmetic(op, data0, data1, data2 byte) (*DecodedInstruction, error) {
-	return NewDecodedInstruction(InstructionGroupArithmetic, op, data0, data1, data2)
-}
-func NewDecodedInstructionImmediateArithmetic(op, data0 byte, imm Word) (*DecodedInstruction, error) {
-	return NewDecodedInstructionImmediate(InstructionGroupArithmetic, op, data0, imm)
-}
