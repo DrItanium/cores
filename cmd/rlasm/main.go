@@ -20,7 +20,7 @@ func main() {
 type Atom []byte
 
 func (this Atom) String() string {
-	return string(this)
+	return strings.TrimSpace(string(this))
 }
 
 type List []interface{}
@@ -28,7 +28,13 @@ type List []interface{}
 func (this List) String() string {
 	out := "("
 	for _, val := range this {
-		out += fmt.Sprintf("%s ", val)
+		switch val.(type) {
+		case List:
+			l := val.(List)
+			out += l.String()
+		default:
+			out += fmt.Sprintf("%s ", val)
+		}
 	}
 	out = strings.TrimSpace(out)
 	out += ")"
