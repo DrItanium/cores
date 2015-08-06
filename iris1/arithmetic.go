@@ -46,23 +46,22 @@ const (
 	DivideByZeroMessage = "Divide by zero error!"
 )
 
-func div(a, b Word) (Word, error) {
+type binOp func(Word, Word) (Word, error)
+
+func genericDivide(a, b Word, denomIsOne, otherwise binOp) (Word, error) {
 	if b == 0 {
 		return 0, fmt.Errorf(DivideByZeroMessage)
 	} else if b == 1 {
-		return a, nil
+		return denomIsOne(a, b)
 	} else {
-		return a / b, nil
+		return otherwise(a, b)
 	}
 }
+func div(a, b Word) (Word, error) {
+	return genericDivide(a, b, func(a, _ Word) (Word, error) { return a, nil }, func(a, b Word) (Word, error) { return a / b, nil })
+}
 func rem(a, b Word) (Word, error) {
-	if b == 0 {
-		return 0, fmt.Errorf(DivideByZeroMessage)
-	} else if b == 1 {
-		return 0, nil
-	} else {
-		return a % b, nil
-	}
+	return genericDivide(a, b, func(_, _ Word) (Word, error) { return 0, nil }, func(a, b Word) (Word, error) { return a % b, nil })
 }
 
 var unimplementedArithmeticOp = ArithmeticOp{
