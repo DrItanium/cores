@@ -21,19 +21,6 @@ type hexExecution struct {
 	Check        string
 }
 
-func (this hexExecution) Invoke() error {
-	if result := this.Value.HexRepresentation(this.LittleEndian); result != this.Check {
-		return fmt.Errorf("hex generation expected %s but got %s instead", this.Check, result)
-	} else {
-		return nil
-	}
-}
-
-var hexInputs = []hexExecution{
-	hexExecution{LittleEndian: true, Value: Atom{0xED, 0xFD}, Check: "0xFDED"},
-	hexExecution{LittleEndian: false, Value: Atom{0xFD, 0xED}, Check: "0xFDED"},
-}
-
 func parseLispString(t *testing.T, index int) {
 	if index >= len(inputs) {
 		t.Errorf("Invalid parsing input %d", index)
@@ -54,14 +41,5 @@ func parseLispString(t *testing.T, index int) {
 func Test_ParseLispStrings(t *testing.T) {
 	for i := 0; i < len(inputs); i++ {
 		parseLispString(t, i)
-	}
-}
-
-func Test_HexParsing(t *testing.T) {
-	for _, hv := range hexInputs {
-		if err := hv.Invoke(); err != nil {
-			t.Error(err)
-			t.Fail()
-		}
 	}
 }
