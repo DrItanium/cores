@@ -4,6 +4,7 @@ package main
 import (
 	"bufio"
 	"container/list"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"strings"
@@ -22,6 +23,50 @@ type Atom []byte
 
 func (this Atom) String() string {
 	return strings.TrimSpace(string(this))
+}
+func (this Atom) HexValue(littleEndian bool) string {
+	// this is an expensive operation!
+	var str string
+	var fn func(string, byte) string
+	if littleEndian {
+		// prefix
+		fn = func(s string, v byte) string {
+			return fmt.Sprintf("%X", v) + s
+		}
+	} else {
+		// postfix
+		fn = func(s string, v byte) string {
+			return s + fmt.Sprintf("%X", v)
+		}
+	}
+	for i := 0; i < len(this); i++ {
+		str = fn(str, this[i])
+	}
+	return "0x" + str
+}
+func (this Atom) Uint64(bo binary.ByteOrder) uint64 {
+	return bo.Uint64([]byte(this))
+}
+func (this Atom) Int64(bo binary.ByteOrder) int64 {
+	return int64(this.Uint64(bo))
+}
+func (this Atom) Uint32(bo binary.ByteOrder) uint32 {
+	return bo.Uint32([]byte(this))
+}
+func (this Atom) Int32(bo binary.ByteOrder) int32 {
+	return int32(this.Uint32(bo))
+}
+
+func (this Atom) Uint16(bo binary.ByteOrder) uint16 {
+	return bo.Uint16([]byte(this))
+}
+
+func (this Atom) Int16(bo binary.ByteOrder) int16 {
+	return int16(this.Uint16(bo))
+}
+
+func (this Atom) Len() int {
+	return len(this)
 }
 
 type List []interface{}
