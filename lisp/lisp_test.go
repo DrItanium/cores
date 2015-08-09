@@ -22,7 +22,7 @@ type hexExecution struct {
 }
 
 func (this hexExecution) Invoke() error {
-	if result := this.Value.HexValue(this.LittleEndian); result != this.Check {
+	if result := this.Value.HexRepresentation(this.LittleEndian); result != this.Check {
 		return fmt.Errorf("hex generation expected %s but got %s instead", this.Check, result)
 	} else {
 		return nil

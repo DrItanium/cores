@@ -14,7 +14,7 @@ type Atom []byte
 func (this Atom) String() string {
 	return strings.TrimSpace(string(this))
 }
-func (this Atom) HexValue(littleEndian bool) string {
+func (this Atom) HexRepresentation(littleEndian bool) string {
 	// this is an expensive operation!
 	var str string
 	var fn func(string, byte) string
@@ -53,6 +53,26 @@ func (this List) String() string {
 	strs := make([]string, len(this))
 	for ind, val := range this {
 		strs[ind] = fmt.Sprintf("%s", val)
+	}
+	str := strings.Join(strs, " ")
+	return fmt.Sprintf("(%s)", str)
+}
+
+type AtomReconstructor func(Atom) string
+
+func (this List) Reconstruct(onAtom AtomReconstructor) string {
+	strs := make([]string, len(this))
+	for ind, val := range this {
+		switch val.(type) {
+		case Atom:
+			a := val.(Atom)
+			strs[ind] = onAtom(a)
+		case List:
+			l := val.(List)
+			strs[ind] = l.Reconstruct(onAtom)
+		default:
+			strs[ind] = fmt.Sprintf("%s", val)
+		}
 	}
 	str := strings.Join(strs, " ")
 	return fmt.Sprintf("(%s)", str)
