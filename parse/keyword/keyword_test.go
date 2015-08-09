@@ -4,36 +4,60 @@ import (
 	"testing"
 )
 
+func expectIsNotKeyword(psr *Parser, kw string, t *testing.T) {
+	if psr.IsKeyword(kw) {
+		t.Errorf("Expected %s to not be keyword!", kw)
+		t.Fail()
+	} else {
+		t.Logf("%s is not keyword!", kw)
+	}
+}
+func expectIsKeyword(psr *Parser, kw string, t *testing.T) {
+	if !psr.IsKeyword(kw) {
+		t.Errorf("Expected %s to be a keyword!", kw)
+		t.Fail()
+	} else {
+		t.Logf("%s is a keyword!", kw)
+	}
+}
+
 func Test_EmptyKeyword(t *testing.T) {
 	p := New()
-	if p.IsKeyword("") {
-		t.Error("Empty string is never a keyword!")
-	} else {
-		t.Log("Empty string is a not a keyword!")
-	}
+	expectIsNotKeyword(p, "", t)
 }
 
 func Test_SingleKeyword(t *testing.T) {
 	p := New()
 	p.AddKeyword("foo")
-	if !p.IsKeyword("foo") {
-		t.Error("Despite foo being a keyword, it wasn't believed to be such!")
-	} else {
-		t.Log("Foo is a keyword!")
-	}
+	expectIsKeyword(p, "foo", t)
 }
 func Test_SingleKeyword_Case(t *testing.T) {
 	p := New()
 	p.AddKeyword("foo")
-	if !p.IsKeyword("foo") {
-		t.Error("Despite foo being a keyword, it wasn't believed to be such!")
-	} else {
-		t.Log("foo is a keyword!")
-	}
+	expectIsKeyword(p, "foo", t)
+	expectIsNotKeyword(p, "Foo", t)
+}
+func Test_MultipleKeywords_1(t *testing.T) {
+	p := New()
+	p.AddKeyword("foo")
+	p.AddKeyword("foot")
+	p.AddKeyword("fog")
+	expectIsKeyword(p, "foo", t)
+	expectIsKeyword(p, "foot", t)
+	expectIsKeyword(p, "fog", t)
+}
 
-	if p.IsKeyword("Foo") {
-		t.Error("Foo (not foo) is marked as a keyword! This is wrong!")
-	} else {
-		t.Log("Foo is not a keyword and that is right!")
-	}
+func Test_MultileKeywords_2(t *testing.T) {
+	p := New()
+	p.AddKeyword("do")
+	p.AddKeyword("defmacro")
+	p.AddKeyword("defun")
+	p.AddKeyword("func")
+	p.AddKeyword("car")
+	p.AddKeyword("cdr")
+	p.AddKeyword("first")
+	p.AddKeyword("rest")
+	expectIsKeyword(p, "func", t)
+	expectIsKeyword(p, "defun", t)
+	expectIsKeyword(p, "car", t)
 }
