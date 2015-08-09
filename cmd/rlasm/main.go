@@ -40,17 +40,17 @@ func main() {
 }
 func TagReconstruct(atom lisp.Atom) string {
 	if IsKeyword(atom) {
-		return fmt.Sprintf("(keyword %s)", atom)
+		return fmt.Sprintf("(keyword %s)\n", atom)
 	} else if numeric.IsHexNumber(atom.String()) {
-		return fmt.Sprintf("(hex %s)", atom)
+		return fmt.Sprintf("(hex %s)\n", atom)
 	} else if numeric.IsBinaryNumber(atom.String()) {
-		return fmt.Sprintf("(binary %s)", atom)
+		return fmt.Sprintf("(binary %s)\n", atom)
 	} else if numeric.IsDecimalNumber(atom.String()) {
-		return fmt.Sprintf("(decimal %s)", atom)
+		return fmt.Sprintf("(decimal %s)\n", atom)
 	} else if IsRegister(atom) {
-		return fmt.Sprintf("(register %s)", atom)
+		return fmt.Sprintf("(register %s)\n", atom)
 	} else {
-		return atom.String()
+		return fmt.Sprintf("(lexeme %s)\n", atom)
 	}
 }
 func IsRegister(atom lisp.Atom) bool {
