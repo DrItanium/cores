@@ -3,12 +3,9 @@ package main
 
 import (
 	"bufio"
-	"container/list"
-	"encoding/binary"
 	"fmt"
 	"github.com/DrItanium/cores/lisp"
 	"os"
-	"strings"
 )
 
 func main() {

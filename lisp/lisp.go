@@ -1,6 +1,14 @@
 // lisp parsing code
 package lisp
 
+import (
+	"bufio"
+	"container/list"
+	"encoding/binary"
+	"fmt"
+	"strings"
+)
+
 type Atom []byte
 
 func (this Atom) String() string {
