@@ -79,11 +79,22 @@ func (this *listParser) closeList() error {
 	}
 }
 func (this *listParser) parse(buf *bufio.Reader) (List, error) {
+	updateList := func(lst List, c Atom) List {
+		if len(c) > 0 {
+			nC := make(Atom, len(c))
+			copy(nC, c)
+			return append(lst, nC)
+		} else {
+			return lst
+		}
+	}
 	var l List
 	var container Atom
 	for c, err := buf.ReadByte(); err == nil; c, err = buf.ReadByte() {
 		switch c {
 		case '(':
+			// save what we currently have to the current list
+			l = updateList(l, container)
 			// push the paren to the stack
 			if err := this.openList(); err != nil {
 				return nil, err
@@ -95,18 +106,11 @@ func (this *listParser) parse(buf *bufio.Reader) (List, error) {
 		case ')':
 			if err := this.closeList(); err != nil {
 				return nil, err
-			} else if len(container) > 0 {
-				nContainer := make(Atom, len(container))
-				copy(nContainer, container)
-				l = append(l, nContainer)
+			} else {
+				return updateList(l, container), nil
 			}
-			return l, nil
 		case ' ', '\n', '\t':
-			if len(container) > 0 {
-				nContainer := make(Atom, len(container))
-				copy(nContainer, container)
-				l = append(l, nContainer)
-			}
+			l = updateList(l, container)
 			container = make(Atom, 0)
 		case ';':
 			// read the rest of the line
