@@ -11,6 +11,7 @@ var inputs = []struct {
 	{"(+ 1 2 3 4) (", true},
 	{"(- 1 2 3 4) )", true},
 	{"(* 1 2 3 4)", false},
+	{"(deffunction a (x y) (* (+ x y) 2))", false},
 }
 
 func parseLispString(t *testing.T, index int) {
