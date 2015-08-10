@@ -5,23 +5,34 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"github.com/DrItanium/cores/iris1"
 	"os"
 )
 
-var target = flag.String("target", "", "Core to target")
-
-func main() {
-	in := bufio.NewReader(os.Stdin)
-	if list, err := lisp.Parse(in); err != nil {
-		fmt.Println(err)
-	} else {
-		fmt.Println(list.Reconstruct(TagReconstruct))
-	}
-}
-
 type Encoder interface {
 	Encode(lisp.List, io.Reader, io.Writer) error
+}
+
+var target = flag.String("target", "", "Core to target")
+
+var backends map[string]Encoder
+
+func main() {
+	if len(backends) == 0 {
+		panic("No backends specified!")
+	} else {
+		flag.Parse()
+		if *target == "" {
+			flag.Usage()
+			return
+		} else {
+			in := bufio.NewReader(os.Stdin)
+			if list, err := lisp.Parse(in); err != nil {
+				fmt.Println(err)
+			} else {
+				fmt.Println(list.Reconstruct(TagReconstruct))
+			}
+		}
+	}
 }
 
 /*
