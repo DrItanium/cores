@@ -75,3 +75,9 @@ func (this Parser) IsKeyword(input string) bool {
 		return cell.isKeyword(input[width:])
 	}
 }
+
+func (this Parser) AddKeywordList(input []string) {
+	for _, in := range input {
+		this.AddKeyword(in)
+	}
+}
