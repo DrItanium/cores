@@ -3,33 +3,14 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"github.com/DrItanium/cores/iris1"
-	"github.com/DrItanium/cores/lisp"
-	"github.com/DrItanium/cores/parse/keyword"
-	"github.com/DrItanium/cores/parse/numeric"
 	"os"
 )
 
-var keywords *keyword.Parser
-var registers *keyword.Parser
+var target = flag.String("target", "", "Core to target")
 
-func init() {
-	keywords = keyword.New()
-	registers = keyword.New()
-	keywords.AddKeyword("add")
-	keywords.AddKeyword("addi")
-	keywords.AddKeyword("label")
-	keywords.AddKeyword("sub")
-	keywords.AddKeyword("hex")
-	keywords.AddKeyword("binary")
-	keywords.AddKeyword("decimal")
-	keywords.AddKeyword("register")
-
-	for i := 0; i < iris1.RegisterCount; i++ {
-		registers.AddKeyword(fmt.Sprintf("r%d", i))
-	}
-}
 func main() {
 	in := bufio.NewReader(os.Stdin)
 	if list, err := lisp.Parse(in); err != nil {
@@ -38,6 +19,12 @@ func main() {
 		fmt.Println(list.Reconstruct(TagReconstruct))
 	}
 }
+
+type Encoder interface {
+	Encode(lisp.List, io.Reader, io.Writer) error
+}
+
+/*
 func TagReconstruct(atom lisp.Atom) string {
 	if IsKeyword(atom) {
 		return fmt.Sprintf("(keyword %s)\n", atom)
@@ -53,6 +40,15 @@ func TagReconstruct(atom lisp.Atom) string {
 		return fmt.Sprintf("(lexeme %s)\n", atom)
 	}
 }
+func IsHexNumber(atom lisp.Atom) bool {
+	return numeric.IsHexNumber(atom.String())
+}
+func IsBinaryNumber(atom lisp.Atom) bool {
+	return numeric.IsBinaryNumber(atom.String())
+}
+func IsDecimalNumber(atom lisp.Atom) bool {
+	return numeric.IsDecimalNumber(atom.String())
+}
 func IsRegister(atom lisp.Atom) bool {
 	return registers.IsKeyword(atom.String())
 }
@@ -60,3 +56,4 @@ func IsRegister(atom lisp.Atom) bool {
 func IsKeyword(atom lisp.Atom) bool {
 	return keywords.IsKeyword(atom.String())
 }
+*/
