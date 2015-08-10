@@ -38,6 +38,8 @@ func main() {
 					if err := enc.Encode(list, nil); err != nil {
 						fmt.Println(err)
 					}
+				} else {
+					fmt.Printf("ERROR: unknown target %s\n", *target)
 				}
 			}
 		}
