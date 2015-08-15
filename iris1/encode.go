@@ -134,14 +134,14 @@ func init() {
 
 }
 
-type ExtendedCore struct {
+type extendedCore struct {
 	Core   *Core
 	Labels map[string]Word
 }
 
 func parse(l lisp.List, out io.Writer) error {
 	// now iterate through all the set of lisp lists
-	var core ExtendedCore
+	var core extendedCore
 	if c, err := New(); err != nil {
 		return err
 	} else {
@@ -167,7 +167,7 @@ func parse(l lisp.List, out io.Writer) error {
 	return nil
 }
 
-func _ParseList(core *ExtendedCore, l lisp.List, out io.Writer) error {
+func _ParseList(core *extendedCore, l lisp.List, out io.Writer) error {
 	// use the first arg as the op and the rest as arguments
 	if len(l) == 0 {
 		return nil

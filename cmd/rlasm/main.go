@@ -17,34 +17,34 @@ var output = flag.String("output", "", "Output encoded asm to, default is standa
 
 var backends map[string]encoder.Encoder
 
+func supportedBackends() {
+	fmt.Println("Supported backends:")
+	for key, _ := range backends {
+		fmt.Println("\t- ", key)
+	}
+}
 func main() {
 	var out io.Writer
 	var rawIn io.Reader
-	if len(backends) == 0 {
-		panic("No backends specified!")
+	flag.Parse()
+	if *target == "" {
+		flag.Usage()
+		supportedBackends()
+		return
 	} else {
-		flag.Parse()
-		if *target == "" {
-			flag.Usage()
-			fmt.Println("Supported backends:")
-			for key, _ := range backends {
-				fmt.Println("\t- ", key)
-			}
-			return
+		rawIn = os.Stdin
+		out = os.Stdout
+		in := bufio.NewReader(rawIn)
+		if list, err := lisp.Parse(in); err != nil {
+			fmt.Println(err)
 		} else {
-			rawIn = os.Stdin
-			out = os.Stdout
-			in := bufio.NewReader(rawIn)
-			if list, err := lisp.Parse(in); err != nil {
-				fmt.Println(err)
-			} else {
-				if enc, ok := backends[*target]; ok {
-					if err := enc.Encode(list, out); err != nil {
-						fmt.Println(err)
-					}
-				} else {
-					fmt.Printf("ERROR: unknown target %s\n", *target)
+			if enc, ok := backends[*target]; ok {
+				if err := enc.Encode(list, out); err != nil {
+					fmt.Println(err)
 				}
+			} else {
+				fmt.Printf("ERROR: unknown target %s\n", *target)
+				supportedBackends()
 			}
 		}
 	}
@@ -53,4 +53,9 @@ func main() {
 func init() {
 	backends = make(map[string]encoder.Encoder)
 	backends["iris1"] = iris1.GetEncoder()
+
+	// this should always be the last part of this init function
+	if len(backends) == 0 {
+		panic("No backends specified!")
+	}
 }
