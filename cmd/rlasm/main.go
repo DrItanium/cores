@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/DrItanium/cores/encoder"
+	"github.com/DrItanium/cores/iris1"
 	"github.com/DrItanium/cores/lisp"
 	"io"
 	"os"
@@ -14,7 +15,7 @@ import (
 var target = flag.String("target", "", "Core to target")
 var output = flag.String("output", "", "Output encoded asm to, default is standard out")
 
-var backends = make(map[string]encoder.Encoder)
+var backends map[string]encoder.Encoder
 
 func main() {
 	var out io.Writer
@@ -47,4 +48,9 @@ func main() {
 			}
 		}
 	}
+}
+
+func init() {
+	backends = make(map[string]encoder.Encoder)
+	backends["iris1"] = iris1.GetEncoder()
 }

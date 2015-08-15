@@ -1,8 +1,8 @@
-package main
+package iris1
 
 import (
 	"fmt"
-	"github.com/DrItanium/cores/iris1"
+	"github.com/DrItanium/cores/encoder"
 	"github.com/DrItanium/cores/lisp"
 	"github.com/DrItanium/cores/parse/keyword"
 	"io"
@@ -10,32 +10,28 @@ import (
 	//	"github.com/DrItanium/cores/parse/numeric"
 )
 
-const iris1BackendName = "iris1"
+const backendName = "iris1"
 
-var iris1keywords *keyword.Parser
-var iris1registers *keyword.Parser
+var keywords *keyword.Parser
+var registers *keyword.Parser
 
-type iris1Encoder func(lisp.List, io.Writer) error
+type translator func(lisp.List, io.Writer) error
 
-func (this iris1Encoder) Encode(l lisp.List, out io.Writer) error {
+func (this translator) Encode(l lisp.List, out io.Writer) error {
 	return this(l, out)
 }
-
+func GetEncoder() encoder.Encoder {
+	return translator(parse)
+}
 func init() {
-	if _, ok := backends[iris1BackendName]; ok {
-		// it shouldn't exist already!
-		panic("The iris1 backend is already defined! Impossible!")
-	} else {
-		backends[iris1BackendName] = iris1Encoder(iris1Parse)
-	}
 	// setup the keywords and register parsers
-	iris1registers = keyword.New()
-	for i := 0; i < iris1.RegisterCount; i++ {
-		iris1registers.AddKeyword(fmt.Sprintf("r%d", i))
+	registers = keyword.New()
+	for i := 0; i < RegisterCount; i++ {
+		registers.AddKeyword(fmt.Sprintf("r%d", i))
 	}
-	iris1keywords = keyword.New()
+	keywords = keyword.New()
 	// arithmetic ops
-	iris1keywords.AddKeywordList([]string{
+	keywords.AddKeywordList([]string{
 		"add",
 		"addi",
 		"sub",
@@ -60,7 +56,7 @@ func init() {
 		"halve",
 	})
 	// compare ops
-	iris1keywords.AddKeywordList([]string{
+	keywords.AddKeywordList([]string{
 		"eq",
 		"eq-and",
 		"eq-or",
@@ -87,7 +83,7 @@ func init() {
 		"ge-xor",
 	})
 	// jump operations
-	iris1keywords.AddKeywordList([]string{
+	keywords.AddKeywordList([]string{
 		"goto-imm",
 		"call-imm",
 		"goto-reg",
@@ -106,7 +102,7 @@ func init() {
 		"goto-select-if0",
 	})
 	// move operations
-	iris1keywords.AddKeywordList([]string{
+	keywords.AddKeywordList([]string{
 		"move",
 		"swap",
 		"swap-reg-addr",
@@ -126,9 +122,9 @@ func init() {
 		"peek",
 	})
 	// misc operations
-	iris1keywords.AddKeyword("system")
+	keywords.AddKeyword("system")
 	// directives
-	iris1keywords.AddKeywordList([]string{
+	keywords.AddKeywordList([]string{
 		"label",
 		"org",
 		"segment",
@@ -138,19 +134,19 @@ func init() {
 
 }
 
-type iris1ExtendedCore struct {
-	Core   *iris1.Core
-	Labels map[string]iris1.Word
+type ExtendedCore struct {
+	Core   *Core
+	Labels map[string]Word
 }
 
-func iris1Parse(l lisp.List, out io.Writer) error {
+func parse(l lisp.List, out io.Writer) error {
 	// now iterate through all the set of lisp lists
-	var core iris1ExtendedCore
-	if c, err := iris1.New(); err != nil {
+	var core ExtendedCore
+	if c, err := New(); err != nil {
 		return err
 	} else {
 		core.Core = c
-		core.Labels = make(map[string]iris1.Word)
+		core.Labels = make(map[string]Word)
 	}
 
 	for _, element := range l {
@@ -160,7 +156,7 @@ func iris1Parse(l lisp.List, out io.Writer) error {
 			log.Printf("Ignoring atom %s", element)
 		case lisp.List:
 			nList := element.(lisp.List)
-			if err := iris1_ParseList(&core, nList, out); err != nil {
+			if err := _ParseList(&core, nList, out); err != nil {
 				return err
 			}
 		default:
@@ -171,7 +167,7 @@ func iris1Parse(l lisp.List, out io.Writer) error {
 	return nil
 }
 
-func iris1_ParseList(core *iris1ExtendedCore, l lisp.List, out io.Writer) error {
+func _ParseList(core *ExtendedCore, l lisp.List, out io.Writer) error {
 	// use the first arg as the op and the rest as arguments
 	if len(l) == 0 {
 		return nil
@@ -181,7 +177,7 @@ func iris1_ParseList(core *iris1ExtendedCore, l lisp.List, out io.Writer) error 
 	switch t := first.(type) {
 	case lisp.Atom:
 		atom := first.(lisp.Atom)
-		if iris1keywords.IsKeyword(atom.String()) {
+		if keywords.IsKeyword(atom.String()) {
 			// determine what kind of operation we are looking at
 			log.Printf("%s", atom)
 		} else {
