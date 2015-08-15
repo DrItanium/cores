@@ -5,19 +5,16 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"github.com/DrItanium/cores/encoder"
 	"github.com/DrItanium/cores/lisp"
 	"io"
 	"os"
 )
 
-type Encoder interface {
-	Encode(lisp.List, io.Writer) error
-}
-
 var target = flag.String("target", "", "Core to target")
 var output = flag.String("output", "", "Output encoded asm to, default is standard out")
 
-var backends = make(map[string]Encoder)
+var backends = make(map[string]encoder.Encoder)
 
 func main() {
 	var out io.Writer
