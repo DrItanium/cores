@@ -3,9 +3,9 @@ package iris1
 import (
 	//	"bufio"
 	"fmt"
-	"github.com/DrItanium/cores/encoder"
 	"github.com/DrItanium/cores/lisp"
 	"github.com/DrItanium/cores/parse/keyword"
+	"github.com/DrItanium/cores/translation"
 	//	"github.com/DrItanium/cores/parse/numeric"
 	"io"
 	"log"
@@ -24,7 +24,7 @@ type translator func(lisp.List, io.Writer) error
 func (this translator) Encode(l lisp.List, out io.Writer) error {
 	return this(l, out)
 }
-func GetEncoder() encoder.Encoder {
+func GetEncoder() translation.Encoder {
 	return translator(parse)
 }
 func init() {

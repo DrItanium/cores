@@ -5,9 +5,9 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"github.com/DrItanium/cores/encoder"
 	"github.com/DrItanium/cores/iris1"
 	"github.com/DrItanium/cores/lisp"
+	"github.com/DrItanium/cores/translation"
 	"io"
 	"os"
 )
@@ -15,7 +15,7 @@ import (
 var target = flag.String("target", "", "Core to target")
 var output = flag.String("output", "", "Output encoded asm to, default is standard out")
 
-var backends map[string]encoder.Encoder
+var backends map[string]translation.Encoder
 
 func supportedBackends() {
 	fmt.Println("Supported backends:")
@@ -51,7 +51,7 @@ func main() {
 }
 
 func init() {
-	backends = make(map[string]encoder.Encoder)
+	backends = make(map[string]translation.Encoder)
 	backends["iris1"] = iris1.GetEncoder()
 
 	// this should always be the last part of this init function
