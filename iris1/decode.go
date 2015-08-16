@@ -59,6 +59,7 @@ func init() {
 	//unparseFuncs[InstructionGroupArithmetic] = unparseArithmetic
 	unparseFuncs[InstructionGroupMove] = unparseMove
 	unparseFuncs[InstructionGroupJump] = unparseJump
+	unparseFuncs[InstructionGroupCompare] = unparseCompare
 }
 
 var dataAtSymbol = lisp.Atom([]byte("data-at"))
@@ -330,5 +331,112 @@ func unparseCompare(inst *DecodedInstruction) (lisp.List, error) {
 		return unparseCompareOp(symbolCompareModifierXor, symbolCompareGreaterThanOrEqualTo, dest, src0, src1), nil
 	default:
 		return nil, fmt.Errorf("Illegal compare op (id %d)!", inst.Op)
+	}
+}
+
+const (
+	symbolArithmeticOpAdd = iota
+	symbolArithmeticOpSub
+	symbolArithmeticOpMul
+	symbolArithmeticOpDiv
+	symbolArithmeticOpRem
+	symbolArithmeticOpShiftLeft
+	symbolArithmeticOpShiftRight
+	symbolArithmeticOpArithmeticAnd
+	symbolArithmeticOpArithmeticOr
+	symbolArithmeticOpArithmeticNot
+	symbolArithmeticOpArithmeticXor
+	symbolArithmeticOpIncrement
+	symbolArithmeticOpDecrement
+	symbolArithmeticOpDouble
+	symbolArithmeticOpHalve
+)
+
+var arithmeticSymbols = []lisp.Atom{
+	lisp.Atom("+"),
+	lisp.Atom("-"),
+	lisp.Atom("*"),
+	lisp.Atom("/"),
+	lisp.Atom("rem"),
+	lisp.Atom("shl"),
+	lisp.Atom("shr"),
+	lisp.Atom("arithmetic-and"),
+	lisp.Atom("arithmetic-or"),
+	lisp.Atom("arithmetic-not"),
+	lisp.Atom("arithmetic-xor"),
+	lisp.Atom("1+"),
+	lisp.Atom("1-"),
+	lisp.Atom("2*"),
+	lisp.Atom("2/"),
+}
+
+const (
+	arithmeticOpRegisterStyle = iota
+	arithmeticOpImmediateStyle
+	arithmeticOpUnaryStyle
+)
+
+var arithmeticTranslationTable = map[byte]struct {
+	Index int
+	Style int
+}{
+	ArithmeticOpAdd:                 {Index: symbolArithmeticOpAdd, Style: arithmeticOpRegisterStyle},
+	ArithmeticOpSub:                 {Index: symbolArithmeticOpSub, Style: arithmeticOpRegisterStyle},
+	ArithmeticOpMul:                 {Index: symbolArithmeticOpMul, Style: arithmeticOpRegisterStyle},
+	ArithmeticOpDiv:                 {Index: symbolArithmeticOpDiv, Style: arithmeticOpRegisterStyle},
+	ArithmeticOpRem:                 {Index: symbolArithmeticOpRem, Style: arithmeticOpRegisterStyle},
+	ArithmeticOpShiftLeft:           {Index: symbolArithmeticOpShiftLeft, Style: arithmeticOpRegisterStyle},
+	ArithmeticOpShiftRight:          {Index: symbolArithmeticOpShiftRight, Style: arithmeticOpRegisterStyle},
+	ArithmeticOpBinaryAnd:           {Index: symbolArithmeticOpArithmeticAnd, Style: arithmeticOpRegisterStyle},
+	ArithmeticOpBinaryOr:            {Index: symbolArithmeticOpArithmeticOr, Style: arithmeticOpRegisterStyle},
+	ArithmeticOpBinaryXor:           {Index: symbolArithmeticOpArithmeticXor, Style: arithmeticOpRegisterStyle},
+	ArithmeticOpBinaryNot:           {Index: symbolArithmeticOpArithmeticNot, Style: arithmeticOpUnaryStyle},
+	ArithmeticOpIncrement:           {Index: symbolArithmeticOpIncrement, Style: arithmeticOpUnaryStyle},
+	ArithmeticOpDecrement:           {Index: symbolArithmeticOpDecrement, Style: arithmeticOpUnaryStyle},
+	ArithmeticOpDouble:              {Index: symbolArithmeticOpDouble, Style: arithmeticOpUnaryStyle},
+	ArithmeticOpHalve:               {Index: symbolArithmeticOpHalve, Style: arithmeticOpUnaryStyle},
+	ArithmeticOpAddImmediate:        {Index: symbolArithmeticOpAdd, Style: arithmeticOpImmediateStyle},
+	ArithmeticOpSubImmediate:        {Index: symbolArithmeticOpSub, Style: arithmeticOpImmediateStyle},
+	ArithmeticOpMulImmediate:        {Index: symbolArithmeticOpMul, Style: arithmeticOpImmediateStyle},
+	ArithmeticOpDivImmediate:        {Index: symbolArithmeticOpDiv, Style: arithmeticOpImmediateStyle},
+	ArithmeticOpRemImmediate:        {Index: symbolArithmeticOpRem, Style: arithmeticOpImmediateStyle},
+	ArithmeticOpShiftLeftImmediate:  {Index: symbolArithmeticOpShiftLeft, Style: arithmeticOpImmediateStyle},
+	ArithmeticOpShiftRightImmediate: {Index: symbolArithmeticOpShiftRight, Style: arithmeticOpImmediateStyle},
+}
+
+func unparseArithmeticOp(symbolIndex int, dest, src0 byte, src1 interface{}) lisp.List {
+	var l lisp.List
+	if src1 == nil {
+		l = unparseGenericArgs(arithmeticSymbols[symbolIndex], registerAtom(src0))
+	} else {
+		l = unparseGenericArgs(arithmeticSymbols[symbolIndex], registerAtom(src0), src1)
+	}
+	return unparseSet(registerAtom(dest), l)
+}
+func unparseArithmeticOpRegister(symbolIndex int, dest, src0, src1 byte) lisp.List {
+	return unparseArithmeticOp(symbolIndex, dest, src0, registerAtom(src1))
+}
+func unparseArithmeticOpImmediate(symbolIndex int, dest, src0, src1 byte) lisp.List {
+	return unparseArithmeticOp(symbolIndex, dest, src0, immediateAtom(Word(src1)))
+}
+func unparseArithmeticOpUnary(symbolIndex int, dest, src0 byte) lisp.List {
+	return unparseArithmeticOp(symbolIndex, dest, src0, nil)
+}
+
+func unparseArithmetic(inst *DecodedInstruction) (lisp.List, error) {
+	if val, ok := arithmeticTranslationTable[inst.Op]; !ok {
+		return nil, fmt.Errorf("Illegal arithmetic op (id %d)!", inst.Op)
+	} else {
+		dest, src0, src1 := inst.Data[0], inst.Data[1], inst.Data[2]
+		switch val.Style {
+		case arithmeticOpRegisterStyle:
+			return unparseArithmeticOpRegister(val.Index, dest, src0, src1), nil
+		case arithmeticOpImmediateStyle:
+			return unparseArithmeticOpImmediate(val.Index, dest, src0, src1), nil
+		case arithmeticOpUnaryStyle:
+			return unparseArithmeticOpUnary(val.Index, dest, src0), nil
+		default:
+			return nil, fmt.Errorf("Unknown arithmetic op style %d!", val.Style)
+		}
 	}
 }
