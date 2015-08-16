@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"container/list"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -100,7 +101,9 @@ func (this *listParser) parse(buf *bufio.Reader) (List, error) {
 	}
 	var l List
 	var container Atom
-	for c, err := buf.ReadByte(); err == nil; c, err = buf.ReadByte() {
+	var c byte
+	var err error
+	for c, err = buf.ReadByte(); err == nil; c, err = buf.ReadByte() {
 		switch c {
 		case '(':
 			// save what we currently have to the current list
@@ -131,5 +134,9 @@ func (this *listParser) parse(buf *bufio.Reader) (List, error) {
 			container = append(container, c)
 		}
 	}
-	return l, nil
+	if err == io.EOF {
+		return l, nil
+	} else {
+		return l, err
+	}
 }

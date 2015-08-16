@@ -19,19 +19,28 @@ func (this tDecoder) Decode(in io.Reader) (lisp.List, error) {
 }
 func unparse(in io.Reader) (lisp.List, error) {
 	i := make([]byte, 4)
-	if count, err := in.Read(i); err != nil {
-		return nil, err
-	} else if count < 4 {
-		return nil, fmt.Errorf("Input stream is not divisible by four evenly!")
-	} else {
+	var l lisp.List
+	var count int
+	var err error
+	for count, err = in.Read(i); err == nil; count, err = in.Read(i) {
+		if count < 4 {
+			return nil, fmt.Errorf("Input stream is not divisible by four evenly!")
+
+		}
 		inst := Instruction(binary.LittleEndian.Uint32(i))
-		if di, err := inst.Decode(); err != nil {
-			return nil, err
+		if di, err0 := inst.Decode(); err0 != nil {
+			return nil, err0
+		} else if sl, err1 := unparseFuncs.invoke(di); err1 != nil {
+			return nil, err1
 		} else {
-			return unparseFuncs.invoke(di)
+			l = append(l, sl)
 		}
 	}
-
+	if err != io.EOF {
+		return nil, err
+	} else {
+		return l, nil
+	}
 }
 
 type instructionDecoder func(*DecodedInstruction) (lisp.List, error)
