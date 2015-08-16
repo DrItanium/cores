@@ -11,8 +11,6 @@ import (
 	//	"github.com/DrItanium/cores/parse/numeric"
 )
 
-const backendName = "iris1"
-
 var keywords *keyword.Parser
 var registers *keyword.Parser
 var directives *keyword.Parser
@@ -29,6 +27,8 @@ func GetEncoder() encoder.Encoder {
 }
 func init() {
 	keywordTranslationTable = map[string]byte{
+		// misc ops
+		"system": byte((MiscOpSystemCall << 3) | InstructionGroupMisc),
 		// arithmetic ops
 		"add":    byte((ArithmeticOpAdd << 3) | InstructionGroupArithmetic),
 		"addi":   byte((ArithmeticOpAddImmediate << 3) | InstructionGroupArithmetic),
@@ -94,106 +94,35 @@ func init() {
 		"call-select-if0": byte((JumpOpIfThenElseCallPredFalse << 3) | InstructionGroupJump),
 		"goto-select-if1": byte((JumpOpIfThenElseNormalPredTrue << 3) | InstructionGroupJump),
 		"goto-select-if0": byte((JumpOpIfThenElseNormalPredFalse << 3) | InstructionGroupJump),
+		// move operations
+		"move":           byte((MoveOpMove << 3) | InstructionGroupMove),
+		"swap":           byte((MoveOpSwap << 3) | InstructionGroupMove),
+		"swap-reg-addr":  byte((MoveOpSwapRegAddr << 3) | InstructionGroupMove),
+		"swap-addr-addr": byte((MoveOpSwapAddrAddr << 3) | InstructionGroupMove),
+		"swap-reg-mem":   byte((MoveOpSwapRegMem << 3) | InstructionGroupMove),
+		"swap-addr-mem":  byte((MoveOpSwapAddrMem << 3) | InstructionGroupMove),
+		"set":            byte((MoveOpSet << 3) | InstructionGroupMove),
+		"load":           byte((MoveOpLoad << 3) | InstructionGroupMove),
+		"load-mem":       byte((MoveOpLoadMem << 3) | InstructionGroupMove),
+		"store":          byte((MoveOpStore << 3) | InstructionGroupMove),
+		"store-addr":     byte((MoveOpStoreAddr << 3) | InstructionGroupMove),
+		"store-mem":      byte((MoveOpStoreMem << 3) | InstructionGroupMove),
+		"store-imm":      byte((MoveOpStoreImm << 3) | InstructionGroupMove),
+		"push":           byte((MoveOpPush << 3) | InstructionGroupMove),
+		"push-imm":       byte((MoveOpPushImmediate << 3) | InstructionGroupMove),
+		"pop":            byte((MoveOpPop << 3) | InstructionGroupMove),
+		"peek":           byte((MoveOpPeek << 3) | InstructionGroupMove),
 	}
 	// setup the keywords and register parsers
 	registers = keyword.New()
 	for i := 0; i < RegisterCount; i++ {
 		registers.AddKeyword(fmt.Sprintf("r%d", i))
 	}
+	// now just iterate through the table we built and store the keys in the set of keywords
 	keywords = keyword.New()
-	// arithmetic ops
-	keywords.AddKeywordList([]string{
-		"add",
-		"addi",
-		"sub",
-		"subi",
-		"mul",
-		"muli",
-		"div",
-		"divi",
-		"rem",
-		"remi",
-		"shl",
-		"shli",
-		"shr",
-		"shri",
-		"and",
-		"or",
-		"not",
-		"xor",
-		"incr",
-		"decr",
-		"double",
-		"halve",
-	})
-	// compare ops
-	keywords.AddKeywordList([]string{
-		"eq",
-		"eq-and",
-		"eq-or",
-		"eq-xor",
-		"neq",
-		"neq-and",
-		"neq-or",
-		"neq-xor",
-		"lt",
-		"lt-and",
-		"lt-or",
-		"lt-xor",
-		"gt",
-		"gt-and",
-		"gt-or",
-		"gt-xor",
-		"le",
-		"le-and",
-		"le-or",
-		"le-xor",
-		"ge",
-		"ge-and",
-		"ge-or",
-		"ge-xor",
-	})
-	// jump operations
-	keywords.AddKeywordList([]string{
-		"goto-imm",
-		"call-imm",
-		"goto-reg",
-		"call-reg",
-		"goto-imm-if1",
-		"call-imm-if1",
-		"goto-reg-if1",
-		"call-reg-if1",
-		"call-select-if1",
-		"goto-select-if1",
-		"goto-imm-if0",
-		"call-imm-if0",
-		"goto-reg-if0",
-		"call-reg-if0",
-		"call-select-if0",
-		"goto-select-if0",
-	})
-	// move operations
-	keywords.AddKeywordList([]string{
-		"move",
-		"swap",
-		"swap-reg-addr",
-		"swap-addr-addr",
-		"swap-reg-mem",
-		"swap-addr-mem",
-		"set",
-		"load",
-		"load-mem",
-		"store",
-		"store-addr",
-		"store-mem",
-		"store-imm",
-		"push",
-		"push-imm",
-		"pop",
-		"peek",
-	})
-	// misc operations
-	keywords.AddKeyword("system")
+	for key, _ := range keywordTranslationTable {
+		keywords.AddKeyword(key)
+	}
 	directives := keyword.New()
 	// directives
 	directives.AddKeywordList([]string{
