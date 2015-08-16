@@ -57,6 +57,8 @@ func init() {
 		unparseFuncs[i] = unimplementedUnparse
 	}
 	//unparseFuncs[InstructionGroupArithmetic] = unparseArithmetic
+	unparseFuncs[InstructionGroupMove] = unparseMove
+	unparseFuncs[InstructionGroupJump] = unparseJump
 }
 
 var dataAtSymbol = lisp.Atom([]byte("data-at"))
@@ -228,5 +230,105 @@ func unparseJump(inst *DecodedInstruction) (lisp.List, error) {
 		return unparseCall(unparseSelect(unparseNot(dest), src0, src1)), nil
 	default:
 		return nil, fmt.Errorf("Illegal jump op (id %d)!", inst.Op)
+	}
+}
+
+const (
+	symbolCompareEq = iota
+	symbolCompareNeq
+	symbolCompareLessThan
+	symbolCompareGreaterThan
+	symbolCompareLessThanOrEqualTo
+	symbolCompareGreaterThanOrEqualTo
+)
+
+var symbolCompareOps = []lisp.Atom{
+	lisp.Atom("="),
+	lisp.Atom("<>"),
+	lisp.Atom("<"),
+	lisp.Atom(">"),
+	lisp.Atom("<="),
+	lisp.Atom(">="),
+}
+
+const (
+	symbolCompareModifierNone = iota
+	symbolCompareModifierAnd
+	symbolCompareModifierOr
+	symbolCompareModifierXor
+)
+
+var symbolCompareModifiers = []lisp.Atom{
+	nil,
+	lisp.Atom("&&"),
+	lisp.Atom("||"),
+	lisp.Atom("xor"),
+}
+
+func unparseCompareOp(compareModifier, compareOp int, dest, src0, src1 byte) lisp.List {
+	destAtom := registerAtom(dest)
+	baseOp := unparseGenericArgs(symbolCompareOps[compareOp], registerAtom(src0), registerAtom(src1))
+	var lst lisp.List
+	if modifier := symbolCompareModifiers[compareModifier]; modifier == nil {
+		lst = baseOp
+	} else {
+		lst = unparseGenericArgs(modifier, destAtom, baseOp)
+	}
+	return unparseSet(destAtom, lst)
+}
+
+func unparseCompare(inst *DecodedInstruction) (lisp.List, error) {
+	dest, src0, src1 := inst.Data[0], inst.Data[1], inst.Data[2]
+	switch inst.Op {
+	case CompareOpEq:
+		return unparseCompareOp(symbolCompareModifierNone, symbolCompareEq, dest, src0, src1), nil
+	case CompareOpEqAnd:
+		return unparseCompareOp(symbolCompareModifierAnd, symbolCompareEq, dest, src0, src1), nil
+	case CompareOpEqOr:
+		return unparseCompareOp(symbolCompareModifierOr, symbolCompareEq, dest, src0, src1), nil
+	case CompareOpEqXor:
+		return unparseCompareOp(symbolCompareModifierXor, symbolCompareEq, dest, src0, src1), nil
+	case CompareOpNeq:
+		return unparseCompareOp(symbolCompareModifierNone, symbolCompareNeq, dest, src0, src1), nil
+	case CompareOpNeqAnd:
+		return unparseCompareOp(symbolCompareModifierAnd, symbolCompareNeq, dest, src0, src1), nil
+	case CompareOpNeqOr:
+		return unparseCompareOp(symbolCompareModifierOr, symbolCompareNeq, dest, src0, src1), nil
+	case CompareOpNeqXor:
+		return unparseCompareOp(symbolCompareModifierXor, symbolCompareNeq, dest, src0, src1), nil
+	case CompareOpLessThan:
+		return unparseCompareOp(symbolCompareModifierNone, symbolCompareLessThan, dest, src0, src1), nil
+	case CompareOpLessThanAnd:
+		return unparseCompareOp(symbolCompareModifierAnd, symbolCompareLessThan, dest, src0, src1), nil
+	case CompareOpLessThanOr:
+		return unparseCompareOp(symbolCompareModifierOr, symbolCompareLessThan, dest, src0, src1), nil
+	case CompareOpLessThanXor:
+		return unparseCompareOp(symbolCompareModifierXor, symbolCompareLessThan, dest, src0, src1), nil
+	case CompareOpGreaterThan:
+		return unparseCompareOp(symbolCompareModifierNone, symbolCompareGreaterThan, dest, src0, src1), nil
+	case CompareOpGreaterThanAnd:
+		return unparseCompareOp(symbolCompareModifierAnd, symbolCompareGreaterThan, dest, src0, src1), nil
+	case CompareOpGreaterThanOr:
+		return unparseCompareOp(symbolCompareModifierOr, symbolCompareGreaterThan, dest, src0, src1), nil
+	case CompareOpGreaterThanXor:
+		return unparseCompareOp(symbolCompareModifierXor, symbolCompareGreaterThan, dest, src0, src1), nil
+	case CompareOpLessThanOrEqualTo:
+		return unparseCompareOp(symbolCompareModifierNone, symbolCompareLessThanOrEqualTo, dest, src0, src1), nil
+	case CompareOpLessThanOrEqualToAnd:
+		return unparseCompareOp(symbolCompareModifierAnd, symbolCompareLessThanOrEqualTo, dest, src0, src1), nil
+	case CompareOpLessThanOrEqualToOr:
+		return unparseCompareOp(symbolCompareModifierOr, symbolCompareLessThanOrEqualTo, dest, src0, src1), nil
+	case CompareOpLessThanOrEqualToXor:
+		return unparseCompareOp(symbolCompareModifierXor, symbolCompareLessThanOrEqualTo, dest, src0, src1), nil
+	case CompareOpGreaterThanOrEqualTo:
+		return unparseCompareOp(symbolCompareModifierNone, symbolCompareGreaterThanOrEqualTo, dest, src0, src1), nil
+	case CompareOpGreaterThanOrEqualToAnd:
+		return unparseCompareOp(symbolCompareModifierAnd, symbolCompareGreaterThanOrEqualTo, dest, src0, src1), nil
+	case CompareOpGreaterThanOrEqualToOr:
+		return unparseCompareOp(symbolCompareModifierOr, symbolCompareGreaterThanOrEqualTo, dest, src0, src1), nil
+	case CompareOpGreaterThanOrEqualToXor:
+		return unparseCompareOp(symbolCompareModifierXor, symbolCompareGreaterThanOrEqualTo, dest, src0, src1), nil
+	default:
+		return nil, fmt.Errorf("Illegal compare op (id %d)!", inst.Op)
 	}
 }
