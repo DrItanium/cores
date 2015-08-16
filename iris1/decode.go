@@ -65,10 +65,11 @@ func init() {
 	for i := 0; i < MajorOperationGroupCount; i++ {
 		unparseFuncs[i] = unimplementedUnparse
 	}
-	//unparseFuncs[InstructionGroupArithmetic] = unparseArithmetic
+	unparseFuncs[InstructionGroupArithmetic] = unparseArithmetic
 	unparseFuncs[InstructionGroupMove] = unparseMove
 	unparseFuncs[InstructionGroupJump] = unparseJump
 	unparseFuncs[InstructionGroupCompare] = unparseCompare
+	unparseFuncs[InstructionGroupMisc] = unparseMisc
 }
 
 var dataAtSymbol = lisp.Atom([]byte("data-at"))

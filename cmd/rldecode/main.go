@@ -40,7 +40,9 @@ func main() {
 			if lst, err := dec.Decode(rawIn); err != nil {
 				fmt.Println(err)
 			} else {
-				fmt.Println(lst)
+				for _, val := range lst {
+					fmt.Println(val)
+				}
 			}
 		} else {
 			fmt.Printf("ERROR: unknown target %s\n", *target)
