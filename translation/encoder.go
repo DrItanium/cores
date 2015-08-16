@@ -1,4 +1,4 @@
-package encoder
+package translation
 
 import (
 	"github.com/DrItanium/cores/lisp"
