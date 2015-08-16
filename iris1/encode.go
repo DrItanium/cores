@@ -6,9 +6,11 @@ import (
 	"github.com/DrItanium/cores/encoder"
 	"github.com/DrItanium/cores/lisp"
 	"github.com/DrItanium/cores/parse/keyword"
+	//	"github.com/DrItanium/cores/parse/numeric"
 	"io"
 	"log"
-	//	"github.com/DrItanium/cores/parse/numeric"
+	"strconv"
+	"strings"
 )
 
 var keywords *keyword.Parser
@@ -165,6 +167,7 @@ func (this *extendedCore) registerLabel(name string) error {
 		return nil
 	}
 }
+
 func (this *extendedCore) changeSegment(name string) error {
 	if name == this.segName {
 		return nil // we're already there so do nothing
@@ -177,11 +180,18 @@ func (this *extendedCore) changeSegment(name string) error {
 		return nil
 	}
 }
+func (this *extendedCore) getCurrentSegmentName() string {
+	return this.segName
+}
+
+// set the address of the current segment
+func (this *extendedCore) setAddress(addr Word) {
+	this.currSegment.Address = addr
+}
 
 type coreTransformer func(*extendedCore, lisp.List) error
 
 func handleLabel(core *extendedCore, contents lisp.List) error {
-
 	// first argument check
 	if len(contents) == 1 {
 		return fmt.Errorf("No titles passed to label")
@@ -211,8 +221,59 @@ func handleLabel(core *extendedCore, contents lisp.List) error {
 	}
 }
 
+func handleSegment(core *extendedCore, contents lisp.List) error {
+	if len(contents) == 1 {
+		return fmt.Errorf("No segment name provided!")
+	} else if len(contents) > 2 {
+		return fmt.Errorf("Too many arguments passed to the segment directive!")
+	} else {
+		arg := contents[1]
+		switch t := arg.(type) {
+		case lisp.Atom:
+			atom := arg.(lisp.Atom)
+			return core.changeSegment(atom.String())
+		default:
+			return fmt.Errorf("Segment argument was not an atom, instead it was a %t", t)
+		}
+	}
+}
+
+func handleOrg(core *extendedCore, contents lisp.List) error {
+	if len(contents) == 1 {
+		return fmt.Errorf("Too few arguments provided to the org directive!")
+	} else if len(contents) > 2 {
+		return fmt.Errorf("Too many arguments provided to the org directive!")
+	} else {
+		arg := contents[1]
+		switch t := arg.(type) {
+		case lisp.Atom:
+			// we need to now do numeric conversion
+			atom := arg.(lisp.Atom)
+			str := atom.String()
+			var addr Word
+			// check and see if we can parse this as any kind of number
+			if hex, err := _parseHexNumber(str); err == nil {
+				addr = hex
+			} else if bits, err := _parseBinaryNumber(str); err == nil {
+				addr = bits
+			} else if number, err := _parseDecimalNumber(str); err == nil {
+				addr = number
+			} else {
+				return fmt.Errorf("Provided \"number\" (%s) is not a parseable or legal number!", str)
+			}
+			// we found a conversion so update the core with the new address of the current segment
+			core.setAddress(addr)
+			return nil
+		default:
+			return fmt.Errorf("Org argument was not an atom, instead it was a %t", t)
+		}
+	}
+}
+
 var directiveTranslations = map[string]coreTransformer{
-	"label": handleLabel,
+	"label":   handleLabel,
+	"segment": handleSegment,
+	"org":     handleOrg,
 }
 
 func parse(l lisp.List, out io.Writer) error {
@@ -239,7 +300,7 @@ func parse(l lisp.List, out io.Writer) error {
 			log.Printf("Ignoring atom %s", element)
 		case lisp.List:
 			nList := element.(lisp.List)
-			if err := _ParseList(&core, nList); err != nil {
+			if err := _parseList(&core, nList); err != nil {
 				return err
 			}
 		default:
@@ -251,8 +312,27 @@ func parse(l lisp.List, out io.Writer) error {
 	//bout := bufio.NewWriter(out)
 	return nil
 }
+func _parseGenericNumber(base int, prefix, input string) (Word, error) {
+	var num string
+	if strings.HasPrefix(input, prefix) {
+		num = input[len(prefix):]
+	} else {
+		num = input
+	}
+	val, err := strconv.ParseUint(num, base, 16)
+	return Word(val), err
+}
+func _parseHexNumber(input string) (Word, error) {
+	return _parseGenericNumber(16, "0x", input)
+}
+func _parseBinaryNumber(input string) (Word, error) {
+	return _parseGenericNumber(2, "0b", input)
+}
+func _parseDecimalNumber(input string) (Word, error) {
+	return _parseGenericNumber(0, "", input)
+}
 
-func _ParseList(core *extendedCore, l lisp.List) error {
+func _parseList(core *extendedCore, l lisp.List) error {
 	// use the first arg as the op and the rest as arguments
 	if len(l) == 0 {
 		return fmt.Errorf("Empty list provided!")
