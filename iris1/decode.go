@@ -440,3 +440,16 @@ func unparseArithmetic(inst *DecodedInstruction) (lisp.List, error) {
 		}
 	}
 }
+
+// misc operations
+var symbolSystem = lisp.Atom("system")
+
+func unparseMisc(inst *DecodedInstruction) (lisp.List, error) {
+	switch inst.Op {
+	case MiscOpSystemCall:
+		// A hack right now since system calls need to be fixed up as it right now isn't very well designed!
+		return unparseGenericArgs(symbolSystem, immediateAtom(Word(inst.Data[0])), registerAtom(inst.Data[1]), registerAtom(inst.Data[2])), nil
+	default:
+		return nil, fmt.Errorf("Unknown misc op (id %d)!", inst.Op)
+	}
+}
