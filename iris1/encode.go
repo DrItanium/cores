@@ -26,92 +26,95 @@ func GetEncoder() encoder.Encoder {
 	return translator(parse)
 }
 func init() {
+	genControlByte := func(op, group byte) byte {
+		return (op << 3) | group
+	}
 	keywordTranslationTable = map[string]byte{
 		// misc ops
-		"system": byte((MiscOpSystemCall << 3) | InstructionGroupMisc),
+		"system": genControlByte(MiscOpSystemCall, InstructionGroupMisc),
 		// arithmetic ops
-		"add":    byte((ArithmeticOpAdd << 3) | InstructionGroupArithmetic),
-		"addi":   byte((ArithmeticOpAddImmediate << 3) | InstructionGroupArithmetic),
-		"sub":    byte((ArithmeticOpSub << 3) | InstructionGroupArithmetic),
-		"subi":   byte((ArithmeticOpSubImmediate << 3) | InstructionGroupArithmetic),
-		"mul":    byte((ArithmeticOpMul << 3) | InstructionGroupArithmetic),
-		"muli":   byte((ArithmeticOpMulImmediate << 3) | InstructionGroupArithmetic),
-		"div":    byte((ArithmeticOpDiv << 3) | InstructionGroupArithmetic),
-		"divi":   byte((ArithmeticOpDivImmediate << 3) | InstructionGroupArithmetic),
-		"rem":    byte((ArithmeticOpRem << 3) | InstructionGroupArithmetic),
-		"remi":   byte((ArithmeticOpRemImmediate << 3) | InstructionGroupArithmetic),
-		"shl":    byte((ArithmeticOpShiftLeft << 3) | InstructionGroupArithmetic),
-		"shli":   byte((ArithmeticOpShiftLeftImmediate << 3) | InstructionGroupArithmetic),
-		"shr":    byte((ArithmeticOpShiftRight << 3) | InstructionGroupArithmetic),
-		"shri":   byte((ArithmeticOpShiftRightImmediate << 3) | InstructionGroupArithmetic),
-		"and":    byte((ArithmeticOpBinaryAnd << 3) | InstructionGroupArithmetic),
-		"or":     byte((ArithmeticOpBinaryOr << 3) | InstructionGroupArithmetic),
-		"not":    byte((ArithmeticOpBinaryNot << 3) | InstructionGroupArithmetic),
-		"xor":    byte((ArithmeticOpBinaryXor << 3) | InstructionGroupArithmetic),
-		"incr":   byte((ArithmeticOpIncrement << 3) | InstructionGroupArithmetic),
-		"decr":   byte((ArithmeticOpDecrement << 3) | InstructionGroupArithmetic),
-		"double": byte((ArithmeticOpDouble << 3) | InstructionGroupArithmetic),
-		"halve":  byte((ArithmeticOpHalve << 3) | InstructionGroupArithmetic),
+		"add":    genControlByte(ArithmeticOpAdd, InstructionGroupArithmetic),
+		"addi":   genControlByte(ArithmeticOpAddImmediate, InstructionGroupArithmetic),
+		"sub":    genControlByte(ArithmeticOpSub, InstructionGroupArithmetic),
+		"subi":   genControlByte(ArithmeticOpSubImmediate, InstructionGroupArithmetic),
+		"mul":    genControlByte(ArithmeticOpMul, InstructionGroupArithmetic),
+		"muli":   genControlByte(ArithmeticOpMulImmediate, InstructionGroupArithmetic),
+		"div":    genControlByte(ArithmeticOpDiv, InstructionGroupArithmetic),
+		"divi":   genControlByte(ArithmeticOpDivImmediate, InstructionGroupArithmetic),
+		"rem":    genControlByte(ArithmeticOpRem, InstructionGroupArithmetic),
+		"remi":   genControlByte(ArithmeticOpRemImmediate, InstructionGroupArithmetic),
+		"shl":    genControlByte(ArithmeticOpShiftLeft, InstructionGroupArithmetic),
+		"shli":   genControlByte(ArithmeticOpShiftLeftImmediate, InstructionGroupArithmetic),
+		"shr":    genControlByte(ArithmeticOpShiftRight, InstructionGroupArithmetic),
+		"shri":   genControlByte(ArithmeticOpShiftRightImmediate, InstructionGroupArithmetic),
+		"and":    genControlByte(ArithmeticOpBinaryAnd, InstructionGroupArithmetic),
+		"or":     genControlByte(ArithmeticOpBinaryOr, InstructionGroupArithmetic),
+		"not":    genControlByte(ArithmeticOpBinaryNot, InstructionGroupArithmetic),
+		"xor":    genControlByte(ArithmeticOpBinaryXor, InstructionGroupArithmetic),
+		"incr":   genControlByte(ArithmeticOpIncrement, InstructionGroupArithmetic),
+		"decr":   genControlByte(ArithmeticOpDecrement, InstructionGroupArithmetic),
+		"double": genControlByte(ArithmeticOpDouble, InstructionGroupArithmetic),
+		"halve":  genControlByte(ArithmeticOpHalve, InstructionGroupArithmetic),
 		// compare ops
-		"eq":      byte((CompareOpEq << 3) | InstructionGroupCompare),
-		"eq-and":  byte((CompareOpEqAnd << 3) | InstructionGroupCompare),
-		"eq-or":   byte((CompareOpEqOr << 3) | InstructionGroupCompare),
-		"eq-xor":  byte((CompareOpEqXor << 3) | InstructionGroupCompare),
-		"neq":     byte((CompareOpNeq << 3) | InstructionGroupCompare),
-		"neq-and": byte((CompareOpNeqAnd << 3) | InstructionGroupCompare),
-		"neq-or":  byte((CompareOpNeqOr << 3) | InstructionGroupCompare),
-		"neq-xor": byte((CompareOpNeqXor << 3) | InstructionGroupCompare),
-		"lt":      byte((CompareOpLessThan << 3) | InstructionGroupCompare),
-		"lt-and":  byte((CompareOpLessThanAnd << 3) | InstructionGroupCompare),
-		"lt-or":   byte((CompareOpLessThanOr << 3) | InstructionGroupCompare),
-		"lt-xor":  byte((CompareOpLessThanXor << 3) | InstructionGroupCompare),
-		"le":      byte((CompareOpLessThanOrEqualTo << 3) | InstructionGroupCompare),
-		"le-and":  byte((CompareOpLessThanOrEqualToAnd << 3) | InstructionGroupCompare),
-		"le-or":   byte((CompareOpLessThanOrEqualToOr << 3) | InstructionGroupCompare),
-		"le-xor":  byte((CompareOpLessThanOrEqualToXor << 3) | InstructionGroupCompare),
-		"gt":      byte((CompareOpGreaterThan << 3) | InstructionGroupCompare),
-		"gt-and":  byte((CompareOpGreaterThanAnd << 3) | InstructionGroupCompare),
-		"gt-or":   byte((CompareOpGreaterThanOr << 3) | InstructionGroupCompare),
-		"gt-xor":  byte((CompareOpGreaterThanXor << 3) | InstructionGroupCompare),
-		"ge":      byte((CompareOpGreaterThanOrEqualTo << 3) | InstructionGroupCompare),
-		"ge-and":  byte((CompareOpGreaterThanOrEqualToAnd << 3) | InstructionGroupCompare),
-		"ge-or":   byte((CompareOpGreaterThanOrEqualToOr << 3) | InstructionGroupCompare),
-		"ge-xor":  byte((CompareOpGreaterThanOrEqualToXor << 3) | InstructionGroupCompare),
+		"eq":      genControlByte(CompareOpEq, InstructionGroupCompare),
+		"eq-and":  genControlByte(CompareOpEqAnd, InstructionGroupCompare),
+		"eq-or":   genControlByte(CompareOpEqOr, InstructionGroupCompare),
+		"eq-xor":  genControlByte(CompareOpEqXor, InstructionGroupCompare),
+		"neq":     genControlByte(CompareOpNeq, InstructionGroupCompare),
+		"neq-and": genControlByte(CompareOpNeqAnd, InstructionGroupCompare),
+		"neq-or":  genControlByte(CompareOpNeqOr, InstructionGroupCompare),
+		"neq-xor": genControlByte(CompareOpNeqXor, InstructionGroupCompare),
+		"lt":      genControlByte(CompareOpLessThan, InstructionGroupCompare),
+		"lt-and":  genControlByte(CompareOpLessThanAnd, InstructionGroupCompare),
+		"lt-or":   genControlByte(CompareOpLessThanOr, InstructionGroupCompare),
+		"lt-xor":  genControlByte(CompareOpLessThanXor, InstructionGroupCompare),
+		"le":      genControlByte(CompareOpLessThanOrEqualTo, InstructionGroupCompare),
+		"le-and":  genControlByte(CompareOpLessThanOrEqualToAnd, InstructionGroupCompare),
+		"le-or":   genControlByte(CompareOpLessThanOrEqualToOr, InstructionGroupCompare),
+		"le-xor":  genControlByte(CompareOpLessThanOrEqualToXor, InstructionGroupCompare),
+		"gt":      genControlByte(CompareOpGreaterThan, InstructionGroupCompare),
+		"gt-and":  genControlByte(CompareOpGreaterThanAnd, InstructionGroupCompare),
+		"gt-or":   genControlByte(CompareOpGreaterThanOr, InstructionGroupCompare),
+		"gt-xor":  genControlByte(CompareOpGreaterThanXor, InstructionGroupCompare),
+		"ge":      genControlByte(CompareOpGreaterThanOrEqualTo, InstructionGroupCompare),
+		"ge-and":  genControlByte(CompareOpGreaterThanOrEqualToAnd, InstructionGroupCompare),
+		"ge-or":   genControlByte(CompareOpGreaterThanOrEqualToOr, InstructionGroupCompare),
+		"ge-xor":  genControlByte(CompareOpGreaterThanOrEqualToXor, InstructionGroupCompare),
 		// Jump operations
-		"goto-imm":        byte((JumpOpUnconditionalImmediate << 3) | InstructionGroupJump),
-		"call-imm":        byte((JumpOpUnconditionalImmediateCall << 3) | InstructionGroupJump),
-		"goto-reg":        byte((JumpOpUnconditionalRegister << 3) | InstructionGroupJump),
-		"call-reg":        byte((JumpOpUnconditionalRegisterCall << 3) | InstructionGroupJump),
-		"goto-imm-if1":    byte((JumpOpConditionalTrueImmediate << 3) | InstructionGroupJump),
-		"call-imm-if1":    byte((JumpOpConditionalTrueImmediateCall << 3) | InstructionGroupJump),
-		"goto-imm-if0":    byte((JumpOpConditionalFalseImmediate << 3) | InstructionGroupJump),
-		"call-imm-if0":    byte((JumpOpConditionalFalseImmediateCall << 3) | InstructionGroupJump),
-		"goto-reg-if1":    byte((JumpOpConditionalTrueRegister << 3) | InstructionGroupJump),
-		"call-reg-if1":    byte((JumpOpConditionalTrueRegisterCall << 3) | InstructionGroupJump),
-		"goto-reg-if0":    byte((JumpOpConditionalFalseRegister << 3) | InstructionGroupJump),
-		"call-reg-if0":    byte((JumpOpConditionalFalseRegisterCall << 3) | InstructionGroupJump),
-		"call-select-if1": byte((JumpOpIfThenElseCallPredTrue << 3) | InstructionGroupJump),
-		"call-select-if0": byte((JumpOpIfThenElseCallPredFalse << 3) | InstructionGroupJump),
-		"goto-select-if1": byte((JumpOpIfThenElseNormalPredTrue << 3) | InstructionGroupJump),
-		"goto-select-if0": byte((JumpOpIfThenElseNormalPredFalse << 3) | InstructionGroupJump),
+		"goto-imm":        genControlByte(JumpOpUnconditionalImmediate, InstructionGroupJump),
+		"call-imm":        genControlByte(JumpOpUnconditionalImmediateCall, InstructionGroupJump),
+		"goto-reg":        genControlByte(JumpOpUnconditionalRegister, InstructionGroupJump),
+		"call-reg":        genControlByte(JumpOpUnconditionalRegisterCall, InstructionGroupJump),
+		"goto-imm-if1":    genControlByte(JumpOpConditionalTrueImmediate, InstructionGroupJump),
+		"call-imm-if1":    genControlByte(JumpOpConditionalTrueImmediateCall, InstructionGroupJump),
+		"goto-imm-if0":    genControlByte(JumpOpConditionalFalseImmediate, InstructionGroupJump),
+		"call-imm-if0":    genControlByte(JumpOpConditionalFalseImmediateCall, InstructionGroupJump),
+		"goto-reg-if1":    genControlByte(JumpOpConditionalTrueRegister, InstructionGroupJump),
+		"call-reg-if1":    genControlByte(JumpOpConditionalTrueRegisterCall, InstructionGroupJump),
+		"goto-reg-if0":    genControlByte(JumpOpConditionalFalseRegister, InstructionGroupJump),
+		"call-reg-if0":    genControlByte(JumpOpConditionalFalseRegisterCall, InstructionGroupJump),
+		"call-select-if1": genControlByte(JumpOpIfThenElseCallPredTrue, InstructionGroupJump),
+		"call-select-if0": genControlByte(JumpOpIfThenElseCallPredFalse, InstructionGroupJump),
+		"goto-select-if1": genControlByte(JumpOpIfThenElseNormalPredTrue, InstructionGroupJump),
+		"goto-select-if0": genControlByte(JumpOpIfThenElseNormalPredFalse, InstructionGroupJump),
 		// move operations
-		"move":           byte((MoveOpMove << 3) | InstructionGroupMove),
-		"swap":           byte((MoveOpSwap << 3) | InstructionGroupMove),
-		"swap-reg-addr":  byte((MoveOpSwapRegAddr << 3) | InstructionGroupMove),
-		"swap-addr-addr": byte((MoveOpSwapAddrAddr << 3) | InstructionGroupMove),
-		"swap-reg-mem":   byte((MoveOpSwapRegMem << 3) | InstructionGroupMove),
-		"swap-addr-mem":  byte((MoveOpSwapAddrMem << 3) | InstructionGroupMove),
-		"set":            byte((MoveOpSet << 3) | InstructionGroupMove),
-		"load":           byte((MoveOpLoad << 3) | InstructionGroupMove),
-		"load-mem":       byte((MoveOpLoadMem << 3) | InstructionGroupMove),
-		"store":          byte((MoveOpStore << 3) | InstructionGroupMove),
-		"store-addr":     byte((MoveOpStoreAddr << 3) | InstructionGroupMove),
-		"store-mem":      byte((MoveOpStoreMem << 3) | InstructionGroupMove),
-		"store-imm":      byte((MoveOpStoreImm << 3) | InstructionGroupMove),
-		"push":           byte((MoveOpPush << 3) | InstructionGroupMove),
-		"push-imm":       byte((MoveOpPushImmediate << 3) | InstructionGroupMove),
-		"pop":            byte((MoveOpPop << 3) | InstructionGroupMove),
-		"peek":           byte((MoveOpPeek << 3) | InstructionGroupMove),
+		"move":           genControlByte(MoveOpMove, InstructionGroupMove),
+		"swap":           genControlByte(MoveOpSwap, InstructionGroupMove),
+		"swap-reg-addr":  genControlByte(MoveOpSwapRegAddr, InstructionGroupMove),
+		"swap-addr-addr": genControlByte(MoveOpSwapAddrAddr, InstructionGroupMove),
+		"swap-reg-mem":   genControlByte(MoveOpSwapRegMem, InstructionGroupMove),
+		"swap-addr-mem":  genControlByte(MoveOpSwapAddrMem, InstructionGroupMove),
+		"set":            genControlByte(MoveOpSet, InstructionGroupMove),
+		"load":           genControlByte(MoveOpLoad, InstructionGroupMove),
+		"load-mem":       genControlByte(MoveOpLoadMem, InstructionGroupMove),
+		"store":          genControlByte(MoveOpStore, InstructionGroupMove),
+		"store-addr":     genControlByte(MoveOpStoreAddr, InstructionGroupMove),
+		"store-mem":      genControlByte(MoveOpStoreMem, InstructionGroupMove),
+		"store-imm":      genControlByte(MoveOpStoreImm, InstructionGroupMove),
+		"push":           genControlByte(MoveOpPush, InstructionGroupMove),
+		"push-imm":       genControlByte(MoveOpPushImmediate, InstructionGroupMove),
+		"pop":            genControlByte(MoveOpPop, InstructionGroupMove),
+		"peek":           genControlByte(MoveOpPeek, InstructionGroupMove),
 	}
 	// setup the keywords and register parsers
 	registers = keyword.New()
@@ -135,47 +138,81 @@ func init() {
 
 }
 
-type extendedCore struct {
-	Core     *Core
-	Labels   map[string]Word
-	segment  string
-	instAddr Word
-	dataAddr Word
+type segment struct {
+	Address Word
+	Labels  map[string]Word
 }
+
+func newSegment() *segment {
+	var s segment
+	s.Labels = make(map[string]Word)
+	return &s
+}
+
+type extendedCore struct {
+	Core        *Core
+	segments    map[string]*segment
+	currSegment *segment
+	segName     string
+}
+
+// registers the given name (in the current segment
+func (this *extendedCore) registerLabel(name string) error {
+	if addr, ok := this.currSegment.Labels[name]; ok {
+		return fmt.Errorf("Label %s is already defined for address %x in segment %s", name, addr, this.segName)
+	} else {
+		this.currSegment.Labels[name] = this.currSegment.Address
+		return nil
+	}
+}
+func (this *extendedCore) changeSegment(name string) error {
+	if name == this.segName {
+		return nil // we're already there so do nothing
+	}
+	if seg, ok := this.segments[name]; !ok {
+		return fmt.Errorf("Illegal segment %s!", name)
+	} else {
+		this.currSegment = seg
+		this.segName = name
+		return nil
+	}
+}
+
 type coreTransformer func(*extendedCore, lisp.List) error
 
-var directiveTranslations = map[string]coreTransformer{
-	"label": func(core *extendedCore, contents lisp.List) error {
-		// first argument check
-		if len(contents) == 1 {
-			return fmt.Errorf("No titles passed to label")
-		} else if len(contents) > 2 {
-			return fmt.Errorf("Too many arguments passed to label!")
-		} else {
-			// do a type check on the actual argument
-			arg := contents[1]
-			switch t := arg.(type) {
-			case lisp.Atom:
-				// check to see if we are looking at a keyword, directive, or register
-				atom := arg.(lisp.Atom)
-				str := atom.String()
-				if keywords.IsKeyword(str) {
-					return fmt.Errorf("Illegal label name '%s', is a operation name!", str)
-				} else if directives.IsKeyword(str) {
-					return fmt.Errorf("Illegal label name '%s', is a directive!", str)
-				} else if registers.IsKeyword(str) {
-					return fmt.Errorf("Illegal label name '%s', is a register!", str)
-				} else {
-					log.Printf("Constructed label: %s", str)
-				}
-			default:
-				return fmt.Errorf("Label argument was not an atom, instead it was a %t", t)
+func handleLabel(core *extendedCore, contents lisp.List) error {
+
+	// first argument check
+	if len(contents) == 1 {
+		return fmt.Errorf("No titles passed to label")
+	} else if len(contents) > 2 {
+		return fmt.Errorf("Too many arguments passed to label!")
+	} else {
+		// do a type check on the actual argument
+		arg := contents[1]
+		switch t := arg.(type) {
+		case lisp.Atom:
+			// check to see if we are looking at a keyword, directive, or register
+			atom := arg.(lisp.Atom)
+			str := atom.String()
+			if keywords.IsKeyword(str) {
+				return fmt.Errorf("Illegal label name '%s', is a operation name!", str)
+			} else if directives.IsKeyword(str) {
+				return fmt.Errorf("Illegal label name '%s', is a directive!", str)
+			} else if registers.IsKeyword(str) {
+				return fmt.Errorf("Illegal label name '%s', is a register!", str)
+			} else {
+				return core.registerLabel(str)
 			}
-			//if _, ok := core.Labels[contents
-			return nil
+		default:
+			return fmt.Errorf("Label argument was not an atom, instead it was a %t", t)
 		}
-	},
-	"org": nil,
+		return nil
+	}
+}
+
+var directiveTranslations = map[string]coreTransformer{
+	"label": handleLabel,
 }
 
 func parse(l lisp.List, out io.Writer) error {
@@ -184,8 +221,15 @@ func parse(l lisp.List, out io.Writer) error {
 	if c, err := New(); err != nil {
 		return err
 	} else {
+		// setup the core
 		core.Core = c
-		core.Labels = make(map[string]Word)
+		code := newSegment()
+		core.currSegment = code
+		core.segName = "code"
+		core.segments = map[string]*segment{
+			"code": code,
+			"data": newSegment(),
+		}
 	}
 	// buildup the core
 	for _, element := range l {
