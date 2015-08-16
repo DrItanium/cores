@@ -4,14 +4,21 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/DrItanium/cores/lisp"
+	"github.com/DrItanium/cores/translation"
 	"io"
 )
 
 func GetDecoder() translation.Decoder {
-	return instructionDecoder(unparse)
+	return tDecoder(unparse)
 }
-func unparse(in io.Reader) (lisp.Lisp, error) {
-	var i [4]byte
+
+type tDecoder func(io.Reader) (lisp.List, error)
+
+func (this tDecoder) Decode(in io.Reader) (lisp.List, error) {
+	return this(in)
+}
+func unparse(in io.Reader) (lisp.List, error) {
+	i := make([]byte, 4)
 	if count, err := in.Read(i); err != nil {
 		return nil, err
 	} else if count < 4 {
@@ -97,42 +104,129 @@ func unparseSwap(first, second interface{}) lisp.List {
 }
 
 func unparseMove(inst *DecodedInstruction) (lisp.List, error) {
+	dest := inst.Data[0]
+	src0 := inst.Data[1]
+	imm := inst.Immediate()
 	switch inst.Op {
 	case MoveOpPush:
-		return unparseTwoArg(pushSymbol, registerAtom(inst.Data[0])), nil
+		return unparseTwoArg(pushSymbol, registerAtom(dest)), nil
 	case MoveOpPushImmediate:
-		return unparseTwoArg(pushSymbol, immediateAtom(inst.Immediate())), nil
+		return unparseTwoArg(pushSymbol, immediateAtom(imm)), nil
 	case MoveOpPop:
-		return unparseTwoArg(popSymbol, registerAtom(inst.Data[0])), nil
+		return unparseTwoArg(popSymbol, registerAtom(dest)), nil
 	case MoveOpPeek:
-		return unparseTwoArg(peekSymbol, registerAtom(inst.Data[0])), nil
+		return unparseTwoArg(peekSymbol, registerAtom(dest)), nil
 	case MoveOpSet:
-		return unparseSet(registerAtom(inst.Data[0]), immediateAtom(inst.Immediate())), nil
+		return unparseSet(registerAtom(dest), immediateAtom(imm)), nil
 	case MoveOpMove:
-		return unparseSet(registerAtom(inst.Data[0]), registerAtom(inst.Data[1])), nil
+		return unparseSet(registerAtom(dest), registerAtom(src0)), nil
 	case MoveOpSwap:
-		return unparseSwap(registerAtom(inst.Data[0]), registerAtom(inst.Data[1])), nil
+		return unparseSwap(registerAtom(dest), registerAtom(src0)), nil
 	case MoveOpSwapRegAddr:
-		return unparseSwap(registerAtom(inst.Data[0]), dataAtRegister(inst.Data[1])), nil
+		return unparseSwap(registerAtom(dest), dataAtRegister(src0)), nil
 	case MoveOpSwapAddrAddr:
-		return unparseSwap(dataAtRegister(inst.Data[0]), dataAtRegister(inst.Data[1])), nil
+		return unparseSwap(dataAtRegister(dest), dataAtRegister(src0)), nil
 	case MoveOpSwapRegMem:
-		return unparseSwap(registerAtom(inst.Data[0]), dataAtImmediate(inst.Immediate())), nil
+		return unparseSwap(registerAtom(dest), dataAtImmediate(imm)), nil
 	case MoveOpSwapAddrMem:
-		return unparseSwap(dataAtRegister(inst.Data[0]), dataAtImmediate(inst.Immediate())), nil
+		return unparseSwap(dataAtRegister(dest), dataAtImmediate(imm)), nil
 	case MoveOpLoad:
-		return unparseSet(registerAtom(inst.Data[0]), dataAtRegister(inst.Data[1])), nil
+		return unparseSet(registerAtom(dest), dataAtRegister(src0)), nil
 	case MoveOpLoadMem:
-		return unparseSet(registerAtom(inst.Data[0]), dataAtImmediate(inst.Immediate())), nil
+		return unparseSet(registerAtom(dest), dataAtImmediate(imm)), nil
 	case MoveOpStore:
-		return unparseSet(dataAtRegister(inst.Data[0]), registerAtom(inst.Data[1])), nil
+		return unparseSet(dataAtRegister(dest), registerAtom(src0)), nil
 	case MoveOpStoreAddr:
-		return unparseSet(dataAtRegister(inst.Data[0]), dataAtRegister(inst.Data[1])), nil
+		return unparseSet(dataAtRegister(dest), dataAtRegister(src0)), nil
 	case MoveOpStoreMem:
-		return unparseSet(dataAtRegister(inst.Data[0]), datatAtImmediate(inst.Immediate())), nil
+		return unparseSet(dataAtRegister(dest), dataAtImmediate(imm)), nil
 	case MoveOpStoreImm:
-		return unparseSet(dataAtRegister(inst.Data[0]), immediateAtom(inst.Immediate())), nil
+		return unparseSet(dataAtRegister(dest), immediateAtom(imm)), nil
 	default:
-		return nil, fmt.Errorf("Illegal operation move op id %d!", inst.Op)
+		return nil, fmt.Errorf("Illegal move op (id %d)!", inst.Op)
+	}
+}
+
+// jump forms
+var symbolIf = lisp.Atom([]byte("if"))
+var symbolThen = lisp.Atom([]byte("then"))
+var symbolElse = lisp.Atom([]byte("else"))
+var symbolNot = lisp.Atom([]byte("not"))
+var symbolGoto = lisp.Atom([]byte("goto"))
+var symbolCall = lisp.Atom([]byte("call"))
+
+func unparseGenericArgs(contents ...interface{}) lisp.List {
+	// play and fast loose with copy over ops
+	list := make(lisp.List, len(contents))
+	copy(list, contents)
+	return list
+}
+func unparseOnTrue(reg byte) lisp.Atom {
+	return registerAtom(reg)
+}
+func unparseNot(reg byte) lisp.List {
+	return unparseGenericArgs(symbolNot, registerAtom(reg))
+}
+func unparseSelect(cond interface{}, onTrue, onFalse byte) lisp.List {
+	return unparseGenericArgs(symbolIf, cond, symbolThen, registerAtom(onTrue), symbolElse, registerAtom(onFalse))
+}
+func unparseIfThen(cond, onTrue interface{}) lisp.List {
+	return unparseGenericArgs(symbolIf, cond, symbolThen, onTrue)
+}
+func unparseGoto(arg interface{}) lisp.List {
+	return unparseGenericArgs(symbolGoto, arg)
+}
+func unparseGotoImmediate(imm Word) lisp.List {
+	return unparseGoto(immediateAtom(imm))
+}
+func unparseGotoRegister(reg byte) lisp.List {
+	return unparseGoto(registerAtom(reg))
+}
+func unparseCall(arg interface{}) lisp.List {
+	return unparseGenericArgs(symbolCall, arg)
+}
+func unparseCallImmediate(imm Word) lisp.List {
+	return unparseCall(immediateAtom(imm))
+}
+func unparseCallRegister(reg byte) lisp.List {
+	return unparseCall(registerAtom(reg))
+}
+func unparseJump(inst *DecodedInstruction) (lisp.List, error) {
+	dest, src0, src1, imm := inst.Data[0], inst.Data[1], inst.Data[2], inst.Immediate()
+	switch inst.Op {
+	case JumpOpUnconditionalImmediate:
+		return unparseGoto(immediateAtom(imm)), nil
+	case JumpOpUnconditionalImmediateCall:
+		return unparseCall(immediateAtom(imm)), nil
+	case JumpOpUnconditionalRegister:
+		return unparseGoto(registerAtom(dest)), nil
+	case JumpOpUnconditionalRegisterCall:
+		return unparseCall(registerAtom(dest)), nil
+	case JumpOpConditionalTrueImmediate:
+		return unparseIfThen(unparseOnTrue(dest), unparseGotoImmediate(imm)), nil
+	case JumpOpConditionalTrueImmediateCall:
+		return unparseIfThen(unparseOnTrue(dest), unparseCallImmediate(imm)), nil
+	case JumpOpConditionalTrueRegister:
+		return unparseIfThen(unparseOnTrue(dest), unparseGotoRegister(src0)), nil
+	case JumpOpConditionalTrueRegisterCall:
+		return unparseIfThen(unparseOnTrue(dest), unparseCallRegister(src0)), nil
+	case JumpOpConditionalFalseImmediate:
+		return unparseIfThen(unparseNot(dest), unparseGotoImmediate(imm)), nil
+	case JumpOpConditionalFalseImmediateCall:
+		return unparseIfThen(unparseNot(dest), unparseCallImmediate(imm)), nil
+	case JumpOpConditionalFalseRegister:
+		return unparseIfThen(unparseNot(dest), unparseGotoRegister(src0)), nil
+	case JumpOpConditionalFalseRegisterCall:
+		return unparseIfThen(unparseNot(dest), unparseCallRegister(src0)), nil
+	case JumpOpIfThenElseNormalPredTrue:
+		return unparseGoto(unparseSelect(unparseOnTrue(dest), src0, src1)), nil
+	case JumpOpIfThenElseNormalPredFalse:
+		return unparseGoto(unparseSelect(unparseNot(dest), src0, src1)), nil
+	case JumpOpIfThenElseCallPredTrue:
+		return unparseCall(unparseSelect(unparseOnTrue(dest), src0, src1)), nil
+	case JumpOpIfThenElseCallPredFalse:
+		return unparseCall(unparseSelect(unparseNot(dest), src0, src1)), nil
+	default:
+		return nil, fmt.Errorf("Illegal jump op (id %d)!", inst.Op)
 	}
 }
