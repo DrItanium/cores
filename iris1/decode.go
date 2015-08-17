@@ -72,21 +72,21 @@ func init() {
 	unparseFuncs[InstructionGroupMisc] = unparseMisc
 }
 
-var dataAtSymbol = lisp.Atom([]byte("data-at"))
-var pushSymbol = lisp.Atom([]byte("push"))
-var popSymbol = lisp.Atom([]byte("pop"))
-var peekSymbol = lisp.Atom([]byte("peek"))
-var setSymbol = lisp.Atom([]byte("set"))
-var swapSymbol = lisp.Atom([]byte("swap"))
+var dataAtSymbol = lisp.Atom("data-at")
+var pushSymbol = lisp.Atom("push")
+var popSymbol = lisp.Atom("pop")
+var peekSymbol = lisp.Atom("peek")
+var setSymbol = lisp.Atom("set")
+var swapSymbol = lisp.Atom("swap")
 var registerAtoms [RegisterCount]lisp.Atom
 
 func init() {
 	for i := 0; i < RegisterCount; i++ {
-		registerAtoms[i] = lisp.Atom([]byte(fmt.Sprintf("r%d", i)))
+		registerAtoms[i] = lisp.Atom(fmt.Sprintf("r%d", i))
 	}
 }
 func immediateAtom(imm Word) lisp.Atom {
-	return lisp.Atom([]byte(fmt.Sprintf("0x%X", imm)))
+	return lisp.Atom(fmt.Sprintf("0x%X", imm))
 }
 func registerAtom(reg byte) lisp.Atom {
 	return registerAtoms[reg]
@@ -161,12 +161,12 @@ func unparseMove(inst *DecodedInstruction) (lisp.List, error) {
 }
 
 // jump forms
-var symbolIf = lisp.Atom([]byte("if"))
-var symbolThen = lisp.Atom([]byte("then"))
-var symbolElse = lisp.Atom([]byte("else"))
-var symbolNot = lisp.Atom([]byte("not"))
-var symbolGoto = lisp.Atom([]byte("goto"))
-var symbolCall = lisp.Atom([]byte("call"))
+var symbolIf = lisp.Atom("if")
+var symbolThen = lisp.Atom("then")
+var symbolElse = lisp.Atom("else")
+var symbolNot = lisp.Atom("not")
+var symbolGoto = lisp.Atom("goto")
+var symbolCall = lisp.Atom("call")
 
 func unparseGenericArgs(contents ...interface{}) lisp.List {
 	// play and fast loose with copy over ops

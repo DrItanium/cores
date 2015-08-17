@@ -31,6 +31,7 @@ func main() {
 	var rawIn io.Reader
 	flag.Parse()
 	if *target == "" {
+		fmt.Println("Target not specified!")
 		flag.Usage()
 		supportedBackends()
 		return

@@ -6,7 +6,6 @@ import (
 	"github.com/DrItanium/cores/lisp"
 	"github.com/DrItanium/cores/parse/keyword"
 	"github.com/DrItanium/cores/translation"
-	//	"github.com/DrItanium/cores/parse/numeric"
 	"io"
 	"log"
 	"strconv"
@@ -27,6 +26,9 @@ func (this translator) Encode(l lisp.List, out io.Writer) error {
 func GetEncoder() translation.Encoder {
 	return translator(parse)
 }
+
+var registers_StringToByte map[string]byte
+
 func init() {
 	genControlByte := func(op, group byte) byte {
 		return (op << 3) | group
@@ -120,8 +122,11 @@ func init() {
 	}
 	// setup the keywords and register parsers
 	registers = keyword.New()
+	registers_StringToByte = make(map[string]byte)
 	for i := 0; i < RegisterCount; i++ {
-		registers.AddKeyword(fmt.Sprintf("r%d", i))
+		str := fmt.Sprintf("r%d", i)
+		registers.AddKeyword(str)
+		registers_StringToByte[str] = byte(i)
 	}
 	// now just iterate through the table we built and store the keys in the set of keywords
 	keywords = keyword.New()
@@ -358,4 +363,75 @@ func _parseList(core *extendedCore, l lisp.List) error {
 		return fmt.Errorf("ERROR: first argument (%s) of operation is not an atom (%t),", first, t)
 	}
 	return nil
+}
+
+func _parseDonuts(core *extendedCore, list lisp.List) error {
+	switch len(list) {
+	case 3:
+		return parseThreeElementList(core, list)
+	default:
+		return fmt.Errorf("Provided list %s doesn't match up to anything!", list)
+	}
+}
+
+type parseFunction func(*extendedCore, lisp.List) error
+
+var threeElementFuncs = map[string]parseFunction{
+	"set": parseSet,
+}
+
+func parseThreeElementList(core *extendedCore, list lisp.List) error {
+	car := list[0]
+	cdr := list[1:]
+	switch t := car.(type) {
+	case lisp.Atom:
+		first := car.(lisp.Atom)
+		if fn, ok := threeElementFuncs[string(first)]; ok {
+			return fn(core, cdr)
+		} else {
+			return fmt.Errorf("Unknown op %s in %s", first, list)
+		}
+	default:
+		return fmt.Errorf("First element of %s is not an atom, it is a %t!", list, t)
+	}
+}
+func parseSetSecondArg_FirstRegister(core *extendedCore, first byte, second interface{}) error {
+	// labels are going to be a little strange
+	switch t := second.(type) {
+	case lisp.Atom:
+		// can be an immediate, label, or register
+		car := second.(lisp.Atom)
+		str := car.String()
+		if registers.IsKeyword(str) {
+			// if we have a register then it is a move
+
+		}
+		return nil
+	case lisp.List:
+		return nil
+	default:
+		return fmt.Errorf("Second argument of (set r%d %s) is of disallowed type %t!", first, second, t)
+	}
+}
+func parseSet(core *extendedCore, args lisp.List) error {
+	first := args[0]
+	second := args[1]
+	// check the type of the first argument
+	switch tFirst := first.(type) {
+	case lisp.Atom:
+		// we are now dealing with either arithmetic, move, or compare ops
+		fAtom := first.(lisp.Atom)
+		str := fAtom.String()
+		if registers.IsKeyword(str) {
+			// now we need to checkout the second argument
+			return parseSetSecondArg_FirstRegister(core, registers_StringToByte[str], second)
+		} else {
+			return fmt.Errorf("First argument of (set %s %s) is not a register!", first, second)
+		}
+	case lisp.List:
+		// this goes to the move operations
+		return nil
+	default:
+		return fmt.Errorf("First argument of (set %s %s) is of incorrect type %t!", first, second, tFirst)
+	}
 }
