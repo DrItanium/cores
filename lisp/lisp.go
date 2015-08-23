@@ -10,13 +10,23 @@ import (
 	"strings"
 )
 
-type Lexeme interface {
+type Thing interface {
+	Type() reflect.Type
+	Value() interface{}
 	fmt.Stringer
 }
 type Atom []byte
 
 func (this Atom) String() string {
 	return strings.TrimSpace(string(this))
+}
+
+func (this Atom) Type() reflect.Type {
+	return reflect.TypeOf(this)
+}
+
+func (this Atom) Value() interface{} {
+	return this
 }
 
 type List []interface{}
@@ -28,6 +38,13 @@ func (this List) String() string {
 	}
 	str := strings.Join(strs, " ")
 	return fmt.Sprintf("(%s)", str)
+}
+
+func (this List) Type() reflect.Type {
+	return reflect.TypeOf(this)
+}
+func (this List) Value() interface{} {
+	return this
 }
 
 type AtomReconstructor func(Atom) string
@@ -177,6 +194,10 @@ func (this Integer) String() string {
 	return fmt.Sprintf("%d", this)
 }
 
+func (this Integer) Value() interface{} {
+	return this
+}
+
 type Uinteger uint64
 
 func (this Uinteger) Integer() int64 {
@@ -198,6 +219,9 @@ func (this Uinteger) Type() reflect.Type {
 
 func (this Uinteger) String() string {
 	return fmt.Sprintf("%d", this)
+}
+func (this Uinteger) Value() interface{} {
+	return this
 }
 
 type Float64 float64
@@ -223,6 +247,10 @@ func (this Float64) String() string {
 	return fmt.Sprintf("%f", this)
 }
 
+func (this Float64) Value() interface{} {
+	return this
+}
+
 type Float32 float32
 
 func (this Float32) Integer() int64 {
@@ -244,4 +272,7 @@ func (this Float32) Type() reflect.Type {
 
 func (this Float32) String() string {
 	return fmt.Sprintf("%f", this)
+}
+func (this Float32) Value() interface{} {
+	return this
 }
