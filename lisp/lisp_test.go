@@ -1,7 +1,6 @@
 package lisp
 
 import (
-	"fmt"
 	"testing"
 )
 
