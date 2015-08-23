@@ -2,18 +2,46 @@ package iris1
 
 import "fmt"
 
-type memControllerInput struct {
-	Code    byte
-	Address Word
-	Value   interface{}
-	Width   byte
+type DeviceInput interface {
+	Code() byte
+	Address() Word
+	Value() interface{}
+	Width() byte
 }
+type memControllerInput struct {
+	code, width byte
+	address     Word
+	value       interface{}
+}
+
+func (this *memControllerInput) Code() byte {
+	return this.code
+}
+func (this *memControllerInput) Width() byte {
+	return this.width
+}
+func (this *memControllerInput) Address() Word {
+	return this.address
+}
+func (this *memControllerInput) Value() interface{} {
+	return this.value
+}
+func newMemControllerInput(code, width byte, address Word, value interface{}) DeviceInput {
+	var mc memControllerInput
+	mc.code = code
+	mc.width = width
+	mc.address = address
+	mc.value = value
+	return &mc
+}
+
+type DeviceInputChannel chan DeviceInput
 type memController struct {
 	rawMemory    []byte
-	input        chan memControllerInput
-	output       chan interface{}
-	signalInput  chan string
-	signalOutput chan error
+	Input        DeviceInputChannel
+	Output       chan interface{}
+	SignalInput  chan string
+	SignalOutput chan error
 	terminate    bool
 	err          bool
 	errMsg       string
@@ -21,10 +49,10 @@ type memController struct {
 
 func (this *memController) signalHandler() {
 	for {
-		result := <-this.signalInput
+		result := <-this.SignalInput
 		if result == "shutdown" {
 			this.terminate = true
-			this.signalOutput <- nil
+			this.SignalOutput <- nil
 			return
 		} else if result == "pause" {
 			this.terminate = true
@@ -40,12 +68,12 @@ func (this *memController) signalHandler() {
 			this.errMsg = ""
 		} else if result == "status" {
 			if this.err {
-				this.signalOutput <- fmt.Errorf("Memory Controller error: %s", errMsg)
+				this.SignalOutput <- fmt.Errorf("Memory Controller error: %s", this.errMsg)
 			} else {
-				this.signalOutput <- nil
+				this.SignalOutput <- nil
 			}
 		} else {
-			this.signalOutput <- fmt.Errorf("ERROR: illegal signal %s", result)
+			this.SignalOutput <- fmt.Errorf("ERROR: illegal signal %s", result)
 		}
 	}
 }
@@ -79,23 +107,24 @@ func (this *memController) handler() {
 		if !this.err {
 			// listen in on stuff
 			select {
-			case in := <-this.input:
-				switch in.Code {
+			case in := <-this.Input:
+				switch in.Code() {
 				case memControllerOperationRead:
-					if r, e := this.memory(in.Address, in.Width); e != nil {
+					r, e := this.memory(in.Address(), in.Width())
+					if e != nil {
 						this.errMsg = e.Error()
 						this.err = true
-						this.output <- memControllerError
+						this.Output <- memControllerError
 					}
-					switch in.Width {
+					switch in.Width() {
 					case 1:
-						this.output <- byte(toDword(r))
+						this.Output <- byte(toDword(r))
 					case 2:
-						this.output <- QuarterWord(toDword(r))
+						this.Output <- Halfword(toDword(r))
 					case 3, 4:
-						this.output <- Word(toDword(r))
+						this.Output <- Word(toDword(r))
 					case 6, 7, 8:
-						this.output <- toDword(r)
+						this.Output <- toDword(r)
 					case 48:
 						packet := make([]Instruction, 8)
 						q := r
@@ -103,26 +132,67 @@ func (this *memController) handler() {
 							packet[i] = toInst(q[:6])
 							q = q[6:]
 						}
-						this.output <- packet
+						this.Output <- packet
 					default:
-						this.output <- r
+						this.Output <- r
 					}
 				case memControllerOperationReadInstruction:
-					if r, e := this.memory(in.Address, 6); e != nil {
-						this.output <- memControllerError
+					if r, e := this.memory(in.Address(), in.Width()); e != nil {
+						this.Output <- memControllerError
 						this.err = true
 						this.errMsg = e.Error()
 					} else {
-						this.output <- toInst(r)
+						this.Output <- toInst(r)
 					}
 				case memControllerOperationWrite:
-					switch t := in.Value.(type) {
+					var e error
+					val := in.Value()
+					switch t := val.(type) {
+					case []byte:
+						e = this.setMemory(in.Address(), val.([]byte))
+					case byte:
+						e = this.setMemory(in.Address(), []byte{val.(byte)})
+					case Halfword:
+						hw := val.(Halfword)
+						e = this.setMemory(in.Address(), []byte{byte(hw), byte(hw >> 8)})
+					case Word:
+						w := val.(Word)
+						e = this.setMemory(in.Address(), []byte{byte(w), byte(w >> 8), byte(w >> 16), byte(w >> 24)})
+					case Dword:
+						w := val.(Dword)
+						e = this.setMemory(in.Address(), []byte{
+							byte(w),
+							byte(w >> 8),
+							byte(w >> 16),
+							byte(w >> 24),
+							byte(w >> 32),
+							byte(w >> 40),
+							byte(w >> 48),
+							byte(w >> 56)})
+					case Instruction:
+						w := val.(Instruction)
+						contents := make([]byte, in.Width())
+						for i := 0; i < int(in.Width()); i++ {
+							if val, err := w.register(i); err != nil {
+								e = err
+								break
+							} else {
+								contents[i] = val
+							}
+						}
+						e = this.setMemory(in.Address(), contents)
 					default:
+						e = fmt.Errorf("ERROR: attempted to write unsupported type %t to memory!", t)
+					}
+					if e != nil {
+						this.errMsg = e.Error()
+						this.err = true
+						this.Output <- memControllerError
 					}
 				default:
-					this.errMsg = fmt.Sprintf("ERROR: unknown memory operation %d", in.Code)
+					this.errMsg = fmt.Sprintf("ERROR: unknown memory operation %d", in.Code())
 					this.err = true
-					this.output <- memControllerError
+					this.Output <- memControllerError
 				}
 			default:
 				// do nothing, just wait around
@@ -130,15 +200,15 @@ func (this *memController) handler() {
 		}
 	}
 }
-func newMemController(size uint32, signalOutput chan error) *memController {
+func newMemController(size uint32) *memController {
 	var mc memController
 	mc.rawMemory = make([]byte, size)
-	mc.input = make(chan memControllerInput)
-	mc.output = make(chan memControllerOutput)
-	mc.signalInput = make(chan string)
-	mc.signalOutput = signalOutput
+	mc.Input = make(DeviceInputChannel)
+	mc.Output = make(chan interface{})
+	mc.SignalInput = make(chan string)
+	mc.SignalOutput = make(chan error)
 	go mc.signalHandler()
-	mc.signalInput <- "startup"
+	mc.SignalInput <- "startup"
 	return &mc
 }
 

@@ -7,7 +7,8 @@ import (
 
 const (
 	RegisterCount            = 256
-	MemorySize               = 65536
+	StackDepth               = 65536
+	CallDepth                = 65536
 	MajorOperationGroupCount = 8
 	SystemCallCount          = 256
 	NumDataBytes             = 5
@@ -182,6 +183,8 @@ type SystemCall ExecutionUnit
 
 type Core struct {
 	gpr    [RegisterCount - UserRegisterBegin]Word
+	stack  [StackDepth]Word
+	call   [CallDepth]Word
 	memory *memController
 	// internal registers that should be easy to find
 	instructionPointer Word
@@ -237,13 +240,32 @@ func (this *Core) Register(index byte) Word {
 		return this.gpr[index-UserRegisterBegin]
 	}
 }
-
-func (this *Core) CodeMemory(address Word) Instruction {
-	return this.code[address]
+func (this *Core) CodeMemory(address Word) (Instruction, error) {
+	// we need to read an instruction
+	this.memory.Input <- newMemControllerInput(memControllerOperationReadInstruction, 6, address, nil)
+	result := <-this.memory.Output
+	switch t := result.(type) {
+	case error:
+		return 0, result.(error)
+	case Instruction:
+		return result.(Instruction), nil
+	default:
+		return 0, fmt.Errorf("ERROR: unknown type returned from memory controller %t", t)
+	}
 }
 func (this *Core) SetCodeMemory(address Word, value Instruction) error {
-	this.code[address] = value
-	return nil
+	this.memory.Input <- newMemControllerInput(memControllerOperationWrite, 6, address, value)
+	result := <-this.memory.Output
+	if result == nil {
+		return nil
+	} else {
+		switch t := result.(type) {
+		case error:
+			return result.(error)
+		default:
+			return fmt.Errorf("Unknown type %t returned from set code memory!", t)
+		}
+	}
 }
 func (this *Core) Call(addr Word) error {
 	this.callPointer++
@@ -267,12 +289,32 @@ func (this *Core) Pop() Word {
 	this.stackPointer--
 	return value
 }
-func (this *Core) DataMemory(address Word) Word {
-	return this.data[address]
+func (this *Core) DataMemory(address Word) (Word, error) {
+	// we need to read an instruction
+	this.memory.Input <- newMemControllerInput(memControllerOperationRead, 4, address, nil)
+	result := <-this.memory.Output
+	switch t := result.(type) {
+	case error:
+		return 0, result.(error)
+	case Word:
+		return result.(Word), nil
+	default:
+		return 0, fmt.Errorf("ERROR: unknown type returned from memory controller %t", t)
+	}
 }
 func (this *Core) SetDataMemory(address, value Word) error {
-	this.data[address] = value
-	return nil
+	this.memory.Input <- newMemControllerInput(memControllerOperationWrite, 4, address, value)
+	result := <-this.memory.Output
+	if result == nil {
+		return nil
+	} else {
+		switch t := result.(type) {
+		case error:
+			return result.(error)
+		default:
+			return fmt.Errorf("Unknown type %t returned from set data memory!", t)
+		}
+	}
 }
 
 var defaultExecutionUnits = []struct {
@@ -286,7 +328,7 @@ var defaultExecutionUnits = []struct {
 	{Group: InstructionGroupMisc, Unit: misc},
 }
 
-func New(memorySize) (*Core, error) {
+func New() (*Core, error) {
 	var c Core
 	c.advancePc = true
 	c.terminateExecution = false
@@ -422,8 +464,8 @@ func (this *Core) TerminateExecution() bool {
 	return this.terminateExecution
 }
 
-func (this *Core) CurrentInstruction() Instruction {
-	return this.code[this.Register(InstructionPointer)]
+func (this *Core) CurrentInstruction() (Instruction, error) {
+	return this.CodeMemory(this.Register(InstructionPointer))
 }
 
 func (this *Core) AdvanceProgramCounter() error {
@@ -438,5 +480,9 @@ func (this *Core) AdvanceProgramCounter() error {
 }
 
 func (this *Core) ExecuteCurrentInstruction() error {
-	return this.Dispatch(this.CurrentInstruction())
+	if val, err := this.CurrentInstruction(); err != nil {
+		return err
+	} else {
+		return this.Dispatch(val)
+	}
 }
