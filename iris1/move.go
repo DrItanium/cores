@@ -116,23 +116,34 @@ func swapRegAddr(core *Core, inst *DecodedInstruction) error {
 	src0 := inst.Data[1]
 	reg := core.Register(dest)
 	memaddr := core.Register(src0)
-	memcontents := core.DataMemory(memaddr)
-	return swapMemoryAndRegister(core, dest, reg, memaddr, memcontents)
+	if memcontents, err := core.DataMemory(memaddr); err != nil {
+		return err
+	} else {
+		return swapMemoryAndRegister(core, dest, reg, memaddr, memcontents)
+	}
 }
 func swapAddrAddr(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
 	src0 := inst.Data[1]
 	addr0 := core.Register(dest)
 	addr1 := core.Register(src0)
-	mem0 := core.DataMemory(addr0)
-	mem1 := core.DataMemory(addr1)
-	return swapMemory(core, addr0, mem0, addr1, mem1)
+	if mem0, err := core.DataMemory(addr0); err != nil {
+		return err
+	} else if mem1, err := core.DataMemory(addr1); err != nil {
+		return err
+	} else {
+		return swapMemory(core, addr0, mem0, addr1, mem1)
+	}
 
 }
 func swapRegMem(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
 	addr := inst.Immediate()
-	return swapMemoryAndRegister(core, dest, core.Register(dest), addr, core.DataMemory(addr))
+	if dat, e := core.DataMemory(addr); e != nil {
+		return e
+	} else {
+		return swapMemoryAndRegister(core, dest, core.Register(dest), addr, dat)
+	}
 }
 func moveOpSet(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
@@ -142,19 +153,31 @@ func swapAddrMem(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
 	addr0 := core.Register(dest)
 	addr1 := inst.Immediate()
-	mem0 := core.DataMemory(addr0)
-	mem1 := core.DataMemory(addr1)
-	return swapMemory(core, addr0, mem0, addr1, mem1)
+	if mem0, err := core.DataMemory(addr0); err != nil {
+		return err
+	} else if mem1, err := core.DataMemory(addr1); err != nil {
+		return err
+	} else {
+		return swapMemory(core, addr0, mem0, addr1, mem1)
+	}
 
 }
 func load(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
 	src0 := inst.Data[1]
-	return core.SetRegister(dest, core.DataMemory(core.Register(src0)))
+	if dat, err := core.DataMemory(core.Register(src0)); err != nil {
+		return err
+	} else {
+		return core.SetRegister(dest, dat)
+	}
 }
 func loadImm(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
-	return core.SetRegister(dest, core.DataMemory(inst.Immediate()))
+	if dat, err := core.DataMemory(inst.Immediate()); err != nil {
+		return err
+	} else {
+		return core.SetRegister(dest, dat)
+	}
 }
 
 func store(core *Core, inst *DecodedInstruction) error {
@@ -165,11 +188,19 @@ func store(core *Core, inst *DecodedInstruction) error {
 func storeAddr(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
 	src0 := inst.Data[1]
-	return core.SetDataMemory(core.Register(dest), core.DataMemory(core.Register(src0)))
+	if dat, err := core.DataMemory(core.Register(src0)); err != nil {
+		return err
+	} else {
+		return core.SetDataMemory(core.Register(dest), dat)
+	}
 }
 func storeMem(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
-	return core.SetDataMemory(core.Register(dest), core.DataMemory(inst.Immediate()))
+	if dat, err := core.DataMemory(inst.Immediate()); err != nil {
+		return err
+	} else {
+		return core.SetDataMemory(core.Register(dest), dat)
+	}
 }
 
 func storeImm(core *Core, inst *DecodedInstruction) error {
