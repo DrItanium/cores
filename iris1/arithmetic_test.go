@@ -6,7 +6,7 @@ func NewDecodedInstructionArithmetic(op, dest, src0, src1 byte) (*DecodedInstruc
 	var di DecodedInstruction
 	di.Group = InstructionGroupArithmetic
 	di.Op = op
-	di.Data[0] = op
+	di.Data[0] = dest
 	di.Data[1] = src0
 	di.Data[2] = src1
 	return &di, nil
