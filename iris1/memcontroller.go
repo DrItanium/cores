@@ -200,7 +200,7 @@ func (this *memController) handler() {
 		}
 	}
 }
-func newMemController(size uint32) *memController {
+func newMemController(size Word) *memController {
 	var mc memController
 	mc.rawMemory = make([]byte, size)
 	mc.Input = make(DeviceInputChannel)

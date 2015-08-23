@@ -12,6 +12,7 @@ const (
 	MajorOperationGroupCount = 8
 	SystemCallCount          = 256
 	NumDataBytes             = 5
+	DefaultMemorySize        = 16777216
 )
 const (
 	// reserved registers
@@ -328,10 +329,11 @@ var defaultExecutionUnits = []struct {
 	{Group: InstructionGroupMisc, Unit: misc},
 }
 
-func New() (*Core, error) {
+func New(size Word) (*Core, error) {
 	var c Core
 	c.advancePc = true
 	c.terminateExecution = false
+	c.memory = newMemController(size)
 	if err := c.SetRegister(InstructionPointer, 0); err != nil {
 		return nil, err
 	}

@@ -284,7 +284,7 @@ var directiveTranslations = map[string]coreTransformer{
 func parse(l lisp.List, out io.Writer) error {
 	// now iterate through all the set of lisp lists
 	var core extendedCore
-	if c, err := New(); err != nil {
+	if c, err := New(DefaultMemorySize); err != nil {
 		return err
 	} else {
 		// setup the core
