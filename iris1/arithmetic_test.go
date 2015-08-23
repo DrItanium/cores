@@ -2,8 +2,17 @@ package iris1
 
 import "testing"
 
+func NewDecodedInstructionArithmetic(op, dest, src0, src1 byte) (*DecodedInstruction, error) {
+	var di DecodedInstruction
+	di.Group = InstructionGroupArithmetic
+	di.Op = op
+	di.Data[0] = op
+	di.Data[1] = src0
+	di.Data[2] = src1
+	return &di, nil
+}
 func Test_Add_1(t *testing.T) {
-	if core, err := New(); err != nil {
+	if core, err := New(DefaultMemorySize); err != nil {
 		t.Fatalf("Couldn't create core %s", err)
 	} else if di, err := NewDecodedInstructionArithmetic(ArithmeticOpAdd, 32, TrueRegister, TrueRegister); err != nil {
 		t.Errorf("Couldn't construct arithmetic instruction: %s", err)
@@ -15,7 +24,7 @@ func Test_Add_1(t *testing.T) {
 }
 
 func Test_Sub_1(t *testing.T) {
-	if core, err := New(); err != nil {
+	if core, err := New(DefaultMemorySize); err != nil {
 		t.Fatalf("Couldn't create core %s", err)
 	} else if di, err := NewDecodedInstructionArithmetic(ArithmeticOpSub, 32, TrueRegister, TrueRegister); err != nil {
 		t.Errorf("Couldn't construct arithmetic instruction: %s", err)
@@ -27,7 +36,7 @@ func Test_Sub_1(t *testing.T) {
 }
 
 func Test_Mul_1(t *testing.T) {
-	if core, err := New(); err != nil {
+	if core, err := New(DefaultMemorySize); err != nil {
 		t.Fatalf("Couldn't create core %s", err)
 	} else if di, err := NewDecodedInstructionArithmetic(ArithmeticOpMul, 32, UserRegisterBegin, UserRegisterBegin); err != nil {
 		t.Errorf("Couldn't construct arithmetic instruction: %s", err)
@@ -43,7 +52,7 @@ func Test_Mul_1(t *testing.T) {
 }
 
 func Test_Div_1(t *testing.T) {
-	if core, err := New(); err != nil {
+	if core, err := New(DefaultMemorySize); err != nil {
 		t.Fatalf("Couldn't create core %s", err)
 	} else if di, err := NewDecodedInstructionArithmetic(ArithmeticOpDiv, UserRegisterBegin+1, UserRegisterBegin, UserRegisterBegin); err != nil {
 		t.Errorf("Couldn't construct arithmetic instruction: %s", err)
@@ -59,7 +68,7 @@ func Test_Div_1(t *testing.T) {
 }
 
 func Test_Div_2(t *testing.T) {
-	if core, err := New(); err != nil {
+	if core, err := New(DefaultMemorySize); err != nil {
 		t.Fatalf("Couldn't create core %s", err)
 	} else if di, err := NewDecodedInstructionArithmetic(ArithmeticOpDiv, UserRegisterBegin+1, UserRegisterBegin, FalseRegister); err != nil {
 		t.Errorf("Couldn't construct arithmetic instruction: %s", err)
@@ -77,7 +86,7 @@ func Test_Div_2(t *testing.T) {
 }
 
 func Test_Rem_1(t *testing.T) {
-	if core, err := New(); err != nil {
+	if core, err := New(DefaultMemorySize); err != nil {
 		t.Fatalf("Couldn't create core %s", err)
 	} else if di, err := NewDecodedInstructionArithmetic(ArithmeticOpRem, UserRegisterBegin+1, UserRegisterBegin, UserRegisterBegin); err != nil {
 		t.Errorf("Couldn't construct arithmetic instruction: %s", err)
@@ -93,7 +102,7 @@ func Test_Rem_1(t *testing.T) {
 }
 
 func Test_Rem_2(t *testing.T) {
-	if core, err := New(); err != nil {
+	if core, err := New(DefaultMemorySize); err != nil {
 		t.Fatalf("Couldn't create core %s", err)
 	} else if di, err := NewDecodedInstructionArithmetic(ArithmeticOpRem, UserRegisterBegin+1, UserRegisterBegin, FalseRegister); err != nil {
 		t.Errorf("Couldn't construct arithmetic instruction: %s", err)

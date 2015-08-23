@@ -3,7 +3,7 @@ package iris1
 import "testing"
 
 func Test_TerminateCall(t *testing.T) {
-	if core, err := New(); err != nil {
+	if core, err := New(DefaultMemorySize); err != nil {
 		t.Errorf("Couldn't create core: %s", err)
 	} else if inst, err := NewDecodedInstruction(InstructionGroupMisc, MiscOpSystemCall, SystemCallTerminate, 0, 0); err != nil {
 		t.Errorf("Couldn't create decoded instruction: %s", err)
