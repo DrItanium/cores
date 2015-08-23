@@ -71,9 +71,10 @@ var errorLookup = []string{
 	"Provided op id %d is larger than the space allotted to specifying the op",
 }
 
-type HalfWord uint16
+type Halfword uint16
 type Word uint32
-type Instruction uint64
+type Dword uint64
+type Instruction Dword
 
 var masks = []struct {
 	Shift, Mask Instruction
@@ -192,70 +193,6 @@ type Core struct {
 	terminateExecution bool
 	groups             [MajorOperationGroupCount]ExecutionUnit
 	systemCalls        [SystemCallCount]SystemCall
-}
-type memControllerInput struct {
-	Address Word
-	Width   byte
-}
-type memControllerOutput struct {
-	Err    error
-	Result []byte
-}
-type memController struct {
-	rawMemory []byte
-	input     chan memControllerInput
-	output    chan memControllerOutput
-}
-
-func newMemController(size uint32) *memController {
-	var mc memController
-	mc.rawMemory = make([]byte, size)
-	mc.input = make(chan memControllerInput)
-	mc.output = make(chan memControllerOutput)
-	return &mc
-}
-func (this *memController) memory(address Word, width byte) ([]byte, error) {
-	if address >= Word(len(this.rawMemory)) {
-		return nil, fmt.Errorf("Attempted to access memory address %x outside of range!", address)
-	} else if (address + Word(width)) >= Word(len(this.rawMemory)) {
-		return nil, fmt.Errorf("Attempted to access %d cells starting at memory address %x! This will go outside range!", width, address)
-	} else if width == 0 {
-		return nil, fmt.Errorf("Attempted to read 0 bytes starting at address %x!", address)
-	} else {
-		return this.rawMemory[address:(Word(width-1) + address)], nil
-	}
-}
-func (this *memController) setMemory(address Word, data []byte) error {
-	if address >= Word(len(this.rawMemory)) {
-		return fmt.Errorf("Memory address %x is outside of memory range!", address)
-	} else if (address + Word(len(data))) >= Word(len(this.rawMemory)) {
-		return fmt.Errorf("Writing %d cells starting at memory address %x will go out of range!", len(data), address)
-	} else {
-		for ind, val := range data {
-			this.rawMemory[address+Word(ind)] = val
-		}
-		return nil
-	}
-}
-func (this *memController) code(address Word) (Instruction, error) {
-	if b, err := this.memory(address, 6); err != nil {
-		return 0, err
-	} else {
-		var i Instruction
-		for ind, val := range b {
-			i.setByte(ind, val)
-		}
-		return i, nil
-	}
-}
-func (this *memController) setCode(address Word, val Instruction) error {
-	//decode an instruction
-	contents := make([]byte, 6)
-	for i := 0; i < len(contents); i++ {
-		mask := masks[i]
-		contents[i] = byte((val & mask.Mask) >> mask.Shift)
-	}
-	return this.setMemory(address, contents)
 }
 
 func (this *Core) SetRegister(index byte, value Word) error {
