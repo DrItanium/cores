@@ -1,4 +1,4 @@
-package patternmatch
+package pattern
 
 import (
 	"fmt"
@@ -68,7 +68,6 @@ func extractOfType(l lisp.List, index int, t reflect.Type) (interface{}, error) 
 }
 
 var stringType = reflect.TypeOf("")
-var atomType = reflect.TypeOf(lisp.Atom(nil))
 
 func extractString(l lisp.List, index int) (string, error) {
 	if result, err := extractOfType(l, index, stringType); err != nil {
@@ -87,7 +86,6 @@ func extractStringAndCheckPrefix(l lisp.List, index int, prefix string) (string,
 		return str[len(prefix):], nil
 	}
 }
-
 func extractSinglefieldArgument(l lisp.List, index int) (SinglefieldVariable, error) {
 	if str, err := extractStringAndCheckPrefix(l, index, SinglefieldVariablePrefix); err != nil {
 		return nil, err
@@ -101,13 +99,5 @@ func extractMultifieldArgument(l lisp.List, index int) (MultifieldVariable, erro
 		return nil, err
 	} else {
 		return MultifieldVariable([]byte(str)), nil
-	}
-}
-
-func extractAtom(l lisp.List, index int) (lisp.Atom, error) {
-	if result, err := extractOfType(l, index, atomType); err != nil {
-		return nil, err
-	} else {
-		return result.(lisp.Atom), nil
 	}
 }
