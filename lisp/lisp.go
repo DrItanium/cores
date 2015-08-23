@@ -6,9 +6,13 @@ import (
 	"container/list"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 )
 
+type Lexeme interface {
+	fmt.Stringer
+}
 type Atom []byte
 
 func (this Atom) String() string {
@@ -139,4 +143,105 @@ func (this *listParser) parse(buf *bufio.Reader) (List, error) {
 	} else {
 		return l, err
 	}
+}
+
+type CoreNumericType int
+
+type Number interface {
+	Integer() int64
+	Uinteger() uint64
+	Float64() float64
+	Float32() float32
+	Type() reflect.Type
+}
+type Integer int64
+
+func (this Integer) Integer() int64 {
+	return int64(this)
+}
+func (this Integer) Uinteger() uint64 {
+	return uint64(this)
+}
+func (this Integer) Float64() float64 {
+	return float64(this)
+}
+func (this Integer) Float32() float32 {
+	return float32(this)
+}
+
+func (this Integer) Type() reflect.Type {
+	return reflect.TypeOf(this)
+}
+
+func (this Integer) String() string {
+	return fmt.Sprintf("%d", this)
+}
+
+type Uinteger uint64
+
+func (this Uinteger) Integer() int64 {
+	return int64(this)
+}
+func (this Uinteger) Uinteger() uint64 {
+	return uint64(this)
+}
+func (this Uinteger) Float64() float64 {
+	return float64(this)
+}
+func (this Uinteger) Float32() float32 {
+	return float32(this)
+}
+
+func (this Uinteger) Type() reflect.Type {
+	return reflect.TypeOf(this)
+}
+
+func (this Uinteger) String() string {
+	return fmt.Sprintf("%d", this)
+}
+
+type Float64 float64
+
+func (this Float64) Integer() int64 {
+	return int64(this)
+}
+func (this Float64) Uinteger() uint64 {
+	return uint64(this)
+}
+func (this Float64) Float64() float64 {
+	return float64(this)
+}
+func (this Float64) Float32() float32 {
+	return float32(this)
+}
+
+func (this Float64) Type() reflect.Type {
+	return reflect.TypeOf(this)
+}
+
+func (this Float64) String() string {
+	return fmt.Sprintf("%f", this)
+}
+
+type Float32 float32
+
+func (this Float32) Integer() int64 {
+	return int64(this)
+}
+func (this Float32) Uinteger() uint64 {
+	return uint64(this)
+}
+func (this Float32) Float64() float64 {
+	return float64(this)
+}
+func (this Float32) Float32() float32 {
+	return float32(this)
+}
+
+func (this Float32) Type() reflect.Type {
+	return reflect.TypeOf(this)
+}
+
+func (this Float32) String() string {
+	return fmt.Sprintf("%f", this)
 }

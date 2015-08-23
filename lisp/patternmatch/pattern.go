@@ -24,6 +24,7 @@ func extractOfType(l lisp.List, index int, t reflect.Type) (interface{}, error) 
 }
 
 var stringType = reflect.TypeOf("")
+var atomType = reflect.TypeOf(lisp.Atom(nil))
 
 func extractString(l lisp.List, index int) (string, error) {
 	if result, err := extractOfType(l, index, stringType); err != nil {
@@ -35,9 +36,9 @@ func extractString(l lisp.List, index int) (string, error) {
 
 func extractStringAndCheckPrefix(l lisp.List, index int, prefix string) (string, error) {
 	if str, err := extractString(l, index); err != nil {
-		return "", err
+		return str, err
 	} else if !strings.HasPrefix(str, prefix) {
-		return "", fmt.Errorf("Extracted value (%s) does not start with %s", str, prefix)
+		return str, fmt.Errorf("Extracted value (%s) does not start with %s", str, prefix)
 	} else {
 		return str[len(prefix):], nil
 	}
@@ -52,11 +53,9 @@ func extractMultifieldArgument(l lisp.List, index int) (string, error) {
 }
 
 func extractAtom(l lisp.List, index int) (lisp.Atom, error) {
-	val := l[index]
-	switch t := val.(type) {
-	case lisp.Atom:
-		return val.(lisp.Atom), nil
-	default:
-		return nil, fmt.Errorf("ERROR: provided index doesn't refer to a lisp.Atom (%t instead)!", t)
+	if result, err := extractOfType(l, index, atomType); err != nil {
+		return nil, err
+	} else {
+		return result.(lisp.Atom), nil
 	}
 }
