@@ -10,6 +10,7 @@ const (
 	MemorySize               = 65536
 	MajorOperationGroupCount = 8
 	SystemCallCount          = 256
+	NumDataBytes             = 5
 )
 const (
 	// reserved registers
@@ -70,28 +71,33 @@ var errorLookup = []string{
 	"Provided op id %d is larger than the space allotted to specifying the op",
 }
 
-type Word uint16
-type Dword uint32
-type Instruction Dword
+type HalfWord uint16
+type Word uint32
+type Instruction uint64
+
+var masks = []struct {
+	Shift, Mask Instruction
+}{
+	{0, 0x00000000000000FF},
+	{8, 0x000000000000FF00},
+	{16, 0x0000000000FF0000},
+	{24, 0x00000000FF000000},
+	{32, 0x000000FF00000000},
+	{40, 0x0000FF0000000000},
+}
 
 func (this Instruction) group() byte {
-	return byte(((this & 0x000000FF) & 0x7))
+	return byte((this & masks[0].Mask) & 0x7)
 }
 func (this Instruction) op() byte {
-	return byte(((this & 0x000000FF) & 0xF8) >> 3)
+	return byte(((this & masks[0].Mask) & 0xF8) >> 3)
 }
 func (this Instruction) register(index int) (byte, error) {
-	switch index {
-	case 0:
-		return byte(this), nil
-	case 1:
-		return byte((this & 0x0000FF00) >> 8), nil
-	case 2:
-		return byte((this & 0x00FF0000) >> 16), nil
-	case 3:
-		return byte((this & 0xFF000000) >> 24), nil
-	default:
+	if index >= len(masks) {
 		return 0, fmt.Errorf("Register index: %d is out of range!", index)
+	} else {
+		mask := masks[index]
+		return byte((this & mask.Mask) >> mask.Shift), nil
 	}
 }
 
@@ -102,43 +108,31 @@ func (this *Instruction) setOp(op byte) {
 	*this = ((*this &^ 0xF8) | (Instruction(op) << 3))
 }
 func (this *Instruction) setByte(index int, value byte) error {
-	switch index {
-	case 1:
-		*this = ((*this &^ 0x0000FF00) | (Instruction(value) << 8))
-	case 2:
-		*this = ((*this &^ 0x00FF0000) | (Instruction(value) << 16))
-	case 3:
-		*this = ((*this &^ 0xFF000000) | (Instruction(value) << 24))
-	default:
+	if index == 0 || index >= len(masks) {
 		return NewError(ErrorEncodeByteOutOfRange, uint(index))
+	} else {
+		mask := masks[index]
+		*this = (*this &^ mask.Mask) | (Instruction(value) << mask.Shift)
+		return nil
 	}
-	return nil
 }
 
 type DecodedInstruction struct {
 	Group byte
 	Op    byte
-	Data  [3]byte
+	Data  [NumDataBytes]byte
 }
 
 func (this Instruction) Decode() (*DecodedInstruction, error) {
 	var di DecodedInstruction
 	di.Group = this.group()
 	di.Op = this.op()
-	if value, err := this.register(1); err != nil {
-		return nil, err
-	} else {
-		di.Data[0] = value
-	}
-	if value, err := this.register(2); err != nil {
-		return nil, err
-	} else {
-		di.Data[1] = value
-	}
-	if value, err := this.register(3); err != nil {
-		return nil, err
-	} else {
-		di.Data[2] = value
+	for i := 1; i <= NumDataBytes; i++ {
+		if value, err := this.register(i); err != nil {
+			return nil, err
+		} else {
+			di.Data[i-1] = value
+		}
 	}
 	return &di, nil
 }
@@ -146,9 +140,11 @@ func (this Instruction) Decode() (*DecodedInstruction, error) {
 func (this *DecodedInstruction) SetImmediate(value Word) {
 	this.Data[1] = byte(value)
 	this.Data[2] = byte(value >> 8)
+	this.Data[3] = byte(value >> 16)
+	this.Data[4] = byte(value >> 24)
 }
 func (this *DecodedInstruction) Immediate() Word {
-	return Word((Word(this.Data[2]) << 8) | Word(this.Data[1]))
+	return Word((Word(this.Data[4]) << 24) | (Word(this.Data[3]) << 16) | (Word(this.Data[2]) << 8) | Word(this.Data[1]))
 }
 
 func (this *DecodedInstruction) Encode() *Instruction {
@@ -156,21 +152,21 @@ func (this *DecodedInstruction) Encode() *Instruction {
 	// encode group
 	i.setGroup(this.Group)
 	i.setOp(this.Op)
-	i.setByte(1, this.Data[0])
-	i.setByte(2, this.Data[1])
-	i.setByte(3, this.Data[2])
+	for index, val := range this.Data {
+		i.setByte(index+1, val)
+	}
 	return i
 }
 
-type IrisError struct {
+type Error struct {
 	value, code uint
 }
 
 func NewError(code, value uint) error {
-	return &IrisError{code: code, value: value}
+	return &Error{code: code, value: value}
 }
 
-func (this IrisError) Error() string {
+func (this Error) Error() string {
 	if this.code == 0 {
 		return fmt.Sprintf("No Error with value %d!!! This should never ever showup!", this.value)
 	} else if this.code >= uint(len(errorLookup)) {
