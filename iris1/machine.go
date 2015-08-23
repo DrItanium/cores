@@ -228,11 +228,11 @@ func (this *memController) memory(address Word, width byte) ([]byte, error) {
 func (this *memController) setMemory(address Word, data []byte) error {
 	if address >= Word(len(this.rawMemory)) {
 		return fmt.Errorf("Memory address %x is outside of memory range!", address)
-	} else if (address + len(data)) >= Word(len(this.rawMemory)) {
+	} else if (address + Word(len(data))) >= Word(len(this.rawMemory)) {
 		return fmt.Errorf("Writing %d cells starting at memory address %x will go out of range!", len(data), address)
 	} else {
 		for ind, val := range data {
-			this.rawMemory[address+ind] = val
+			this.rawMemory[address+Word(ind)] = val
 		}
 		return nil
 	}
@@ -250,7 +250,7 @@ func (this *memController) code(address Word) (Instruction, error) {
 }
 func (this *memController) setCode(address Word, val Instruction) error {
 	//decode an instruction
-	var contents [6]byte
+	contents := make([]byte, 6)
 	for i := 0; i < len(contents); i++ {
 		mask := masks[i]
 		contents[i] = byte((val & mask.Mask) >> mask.Shift)
