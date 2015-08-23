@@ -165,24 +165,3 @@ func (this *memController) setMemory(address Word, data []byte) error {
 		return nil
 	}
 }
-
-func (this *memController) code(address Word) (Instruction, error) {
-	if b, err := this.memory(address, 6); err != nil {
-		return 0, err
-	} else {
-		var i Instruction
-		for ind, val := range b {
-			i.setByte(ind, val)
-		}
-		return i, nil
-	}
-}
-func (this *memController) setCode(address Word, val Instruction) error {
-	//decode an instruction
-	contents := make([]byte, 6)
-	for i := 0; i < len(contents); i++ {
-		mask := masks[i]
-		contents[i] = byte((val & mask.Mask) >> mask.Shift)
-	}
-	return this.setMemory(address, contents)
-}
