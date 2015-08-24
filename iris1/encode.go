@@ -33,7 +33,7 @@ const (
 )
 
 var registers_StringToByte map[string]byte
-var ucodeArithmeticSymbols = []struct {
+var µcodeArithmeticSymbols = []struct {
 	Symbol, Src1 string
 	Op           byte
 }{
@@ -52,16 +52,16 @@ var ucodeArithmeticSymbols = []struct {
 	{Symbol: "1-", Src1: "r", Op: ArithmeticOpDecrement},
 	{Symbol: "2*", Src1: "r", Op: ArithmeticOpDouble},
 	{Symbol: "2/", Src1: "r", Op: ArithmeticOpHalve},
-	{Symbol: "+", Src1: "!", Op: ArithmeticOpAddImmediate},
-	{Symbol: "-", Src1: "!", Op: ArithmeticOpSubImmediate},
-	{Symbol: "*", Src1: "!", Op: ArithmeticOpMulImmediate},
-	{Symbol: "/", Src1: "!", Op: ArithmeticOpDivImmediate},
-	{Symbol: "mod", Src1: "!", Op: ArithmeticOpRemImmediate},
-	{Symbol: "<<", Src1: "!", Op: ArithmeticOpShiftLeftImmediate},
-	{Symbol: ">>", Src1: "!", Op: ArithmeticOpShiftRightImmediate},
+	{Symbol: "+", Src1: "i8", Op: ArithmeticOpAddImmediate},
+	{Symbol: "-", Src1: "i8", Op: ArithmeticOpSubImmediate},
+	{Symbol: "*", Src1: "i8", Op: ArithmeticOpMulImmediate},
+	{Symbol: "/", Src1: "i8", Op: ArithmeticOpDivImmediate},
+	{Symbol: "mod", Src1: "i8", Op: ArithmeticOpRemImmediate},
+	{Symbol: "<<", Src1: "i8", Op: ArithmeticOpShiftLeftImmediate},
+	{Symbol: ">>", Src1: "i8", Op: ArithmeticOpShiftRightImmediate},
 }
 
-var ucodeCompareSymbols = []struct {
+var µcodeCompareSymbols = []struct {
 	Symbol        string
 	Combinatorial bool
 	CombineSymbol string
@@ -93,26 +93,34 @@ var ucodeCompareSymbols = []struct {
 	{Symbol: ">=", Combinatorial: true, CombineSymbol: "xor", Op: CompareOpGreaterThanOrEqualToXor},
 }
 
-const (
-	ucodeRegisterSymbol  = "r"
-	ucodeImmediateSymbol = "!"
-	ucodeBinaryOpBase    = "(%s %s %s)"
-	ucodeUnaryOpBase     = "(%s %s)"
-	ucodeIfCondition     = "(if %s then %s)"
-	ucodeIfElseCondition = "(if %s then %s else %s)"
-)
-
-var notOp = fmt.Sprintf(ucodeUnaryOpBase, "not", ucodeRegisterSymbol)
-var setOpBase = fmt.Sprintf(ucodeBinaryOpBase, "set", "%s", "%s")
-var swapOpBase = fmt.Sprintf(ucodeBinaryOpBase, "swap", "%s", "%s")
-var arithmeticOpBase = fmt.Sprintf(setOpBase, ucodeRegisterSymbol, fmt.Sprintf(ucodeBinaryOpBase, "%s", ucodeRegisterSymbol, "%s"))
-var compareOpBase0 = fmt.Sprintf(setOpBase, ucodeRegisterSymbol, fmt.Sprintf(ucodeBinaryOpBase, "%s", ucodeRegisterSymbol, ucodeRegisterSymbol))
-var compareOpBase1 = fmt.Sprintf(setOpBase, ucodeRegisterSymbol, fmt.Sprintf(ucodeBinaryOpBase, "%s", ucodeRegisterSymbol, fmt.Sprintf(ucodeBinaryOpBase, "%s", ucodeRegisterSymbol, ucodeRegisterSymbol)))
-var jumpOpUnaryGoto = fmt.Sprintf(ucodeUnaryOpBase, "goto", "%s")
-var jumpOpUnaryCall = fmt.Sprintf(ucodeUnaryOpBase, "ucode", "%s")
-
 // generator strings
-var ucode map[string]string
+var µcode map[string]string
+
+type networkMatcher func(interface{}) bool
+
+// the network used to perform matching
+type networkNode struct {
+	fn       networkMatcher
+	collect  bool
+	children []*networkNode
+}
+
+func (this *networkNode) Match(cell interface{}) bool {
+	return this.fn(cell)
+}
+func newNetworkNode(list lisp.List) (*networkNode, error) {
+	if len(list) == 0 {
+		return nil, fmt.Errorf("empty list!")
+	}
+	first := list[0]
+	switch t := first.(type) {
+	case lisp.Atom:
+	case lisp.List:
+	default:
+		return nil, fmt.Errorf("unknown type %t found during µcode network creation!", t)
+	}
+	return nil, nil
+}
 
 func init() {
 
@@ -131,18 +139,18 @@ func init() {
 	compareCode := func(op byte) string {
 		return genControlCode(InstructionGroupCompare, op)
 	}
-	ucode = map[string]string{
+	µcode = map[string]string{
 		// jump operations
-		"(goto !)":                          jumpCode(JumpOpUnconditionalImmediate),
+		"(goto i16)":                        jumpCode(JumpOpUnconditionalImmediate),
 		"(goto r)":                          jumpCode(JumpOpUnconditionalRegister),
-		"(call !)":                          jumpCode(JumpOpUnconditionalImmediateCall),
+		"(call i16)":                        jumpCode(JumpOpUnconditionalImmediateCall),
 		"(call r)":                          jumpCode(JumpOpUnconditionalRegisterCall),
-		"(if r then (goto !))":              jumpCode(JumpOpConditionalTrueImmediate),
-		"(if (not r) then (goto !))":        jumpCode(JumpOpConditionalFalseImmediate),
+		"(if r then (goto i16))":            jumpCode(JumpOpConditionalTrueImmediate),
+		"(if (not r) then (goto i16))":      jumpCode(JumpOpConditionalFalseImmediate),
 		"(if r then (goto r))":              jumpCode(JumpOpConditionalTrueRegister),
 		"(if (not r) then (goto r))":        jumpCode(JumpOpConditionalFalseRegister),
-		"(if r then (call !))":              jumpCode(JumpOpConditionalTrueImmediateCall),
-		"(if (not r) then (call !))":        jumpCode(JumpOpConditionalFalseImmediateCall),
+		"(if r then (call i16))":            jumpCode(JumpOpConditionalTrueImmediateCall),
+		"(if (not r) then (call i16))":      jumpCode(JumpOpConditionalFalseImmediateCall),
 		"(if r then (call r))":              jumpCode(JumpOpConditionalTrueRegisterCall),
 		"(if (not r) then (call r))":        jumpCode(JumpOpConditionalFalseRegisterCall),
 		"(goto (if r then r else r))":       jumpCode(JumpOpIfThenElseNormalPredTrue),
@@ -150,38 +158,38 @@ func init() {
 		"(call (if r then r else r))":       jumpCode(JumpOpIfThenElseCallPredTrue),
 		"(call (if (not r) then r else r))": jumpCode(JumpOpIfThenElseCallPredFalse),
 		// move forms
-		"(set r r)":                        moveCode(MoveOpMove),
-		"(set r !)":                        moveCode(MoveOpSet),
-		"(swap r r)":                       moveCode(MoveOpSwap),
-		"(swap r (data-at r))":             moveCode(MoveOpSwapRegAddr),
-		"(swap (data-at r) (data-at r))":   moveCode(MoveOpSwapAddrAddr),
-		"(swap r (data-at !))":             moveCode(MoveOpSwapRegMem),
-		"(swap (data-at r) (data-at !))":   moveCode(MoveOpSwapAddrMem),
-		"(set r (data-at r))":              moveCode(MoveOpLoad),
-		"(set r (data-at !))":              moveCode(MoveOpLoadMem),
-		"(set (data-at r) r)":              moveCode(MoveOpStore),
-		"(set (data-at r) (data-at r))":    moveCode(MoveOpStoreAddr),
-		"(set (data-at r100) (data-at !))": moveCode(MoveOpStoreMem),
-		"(set (data-at r100) !)":           moveCode(MoveOpStoreImm),
-		"(push r)":                         moveCode(MoveOpPush),
-		"(push !)":                         moveCode(MoveOpPushImmediate),
-		"(pop r)":                          moveCode(MoveOpPop),
-		"(peek r)":                         moveCode(MoveOpPeek),
+		"(set r r)":                          moveCode(MoveOpMove),
+		"(set r i16)":                        moveCode(MoveOpSet),
+		"(swap r r)":                         moveCode(MoveOpSwap),
+		"(swap r (data-at r))":               moveCode(MoveOpSwapRegAddr),
+		"(swap (data-at r) (data-at r))":     moveCode(MoveOpSwapAddrAddr),
+		"(swap r (data-at i16))":             moveCode(MoveOpSwapRegMem),
+		"(swap (data-at r) (data-at i16))":   moveCode(MoveOpSwapAddrMem),
+		"(set r (data-at r))":                moveCode(MoveOpLoad),
+		"(set r (data-at i16))":              moveCode(MoveOpLoadMem),
+		"(set (data-at r) r)":                moveCode(MoveOpStore),
+		"(set (data-at r) (data-at r))":      moveCode(MoveOpStoreAddr),
+		"(set (data-at r100) (data-at i16))": moveCode(MoveOpStoreMem),
+		"(set (data-at r100) i16)":           moveCode(MoveOpStoreImm),
+		"(push r)":                           moveCode(MoveOpPush),
+		"(push i16)":                         moveCode(MoveOpPushImmediate),
+		"(pop r)":                            moveCode(MoveOpPop),
+		"(peek r)":                           moveCode(MoveOpPeek),
 	}
 	arithmeticString := "(set r (%s r %s))"
-	for _, element := range ucodeArithmeticSymbols {
-		ucode[fmt.Sprintf(arithmeticString, element.Symbol, element.Src1)] = arithmeticCode(element.Op)
+	for _, element := range µcodeArithmeticSymbols {
+		µcode[fmt.Sprintf(arithmeticString, element.Symbol, element.Src1)] = arithmeticCode(element.Op)
 	}
 	combinatorialCompareString := "(set r (%s r (%s r r)))"
 	compareString := "(set r (%s r r))"
-	for _, element := range ucodeCompareSymbols {
+	for _, element := range µcodeCompareSymbols {
 		var msg string
 		if element.Combinatorial {
 			msg = fmt.Sprintf(combinatorialCompareString, element.CombineSymbol, element.Symbol)
 		} else {
 			msg = fmt.Sprintf(compareString, element.Symbol)
 		}
-		ucode[msg] = compareCode(element.Op)
+		µcode[msg] = compareCode(element.Op)
 	}
 	// setup the keywords and register parsers
 	registers = keyword.New()
@@ -205,6 +213,8 @@ func init() {
 		"value",
 		"string",
 	})
+
+	// now setup the match "network"
 
 }
 
