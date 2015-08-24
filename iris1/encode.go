@@ -98,6 +98,7 @@ var µcode map[string]string
 
 type networkMatcher func(interface{}) bool
 
+/*
 // the network used to perform matching
 type networkNode struct {
 	fn       networkMatcher
@@ -115,12 +116,26 @@ func newNetworkNode(list lisp.List) (*networkNode, error) {
 	first := list[0]
 	switch t := first.(type) {
 	case lisp.Atom:
+		at := first.(lisp.Atom)
+		str := at.String()
+		if str == "r" {
+			// it is a register so check for that
+		} else if str == "i8" {
+
+		} else if str == "i16" {
+
+		} else {
+
+		}
 	case lisp.List:
 	default:
 		return nil, fmt.Errorf("unknown type %t found during µcode network creation!", t)
 	}
 	return nil, nil
 }
+
+var top *networkNode
+*/
 
 func init() {
 
