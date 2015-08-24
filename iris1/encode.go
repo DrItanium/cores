@@ -10,6 +10,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 var keywords *keyword.Parser
@@ -418,8 +419,28 @@ func isKeywordOrNumber(atom lisp.Atom) bool {
 	str := atom.String()
 	return registers.IsKeyword(str) || isNumber(str)
 }
-func isLiteralValue(atom lisp.Atom, str string) bool {
+func equalsLiteralValue(atom lisp.Atom, str string) bool {
 	return str == atom.String()
+}
+func isQuoted(runes []rune) bool {
+	return runes[0] == '"' && runes[len(runes)-1] == '"'
+}
+func isSingleWord(runes []rune) bool {
+	if !isQuoted(runes) {
+		for _, r := range runes {
+			if !unicode.IsPrint(r) || unicode.IsSpace(r) || r == '"' || r == '\'' {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+func isLabel(atom lisp.Atom) bool {
+	runes := []rune(atom.String())
+	f := runes[0]
+	return unicode.IsPrint(f) && !unicode.IsNumber(f) && f != 'r' && isSingleWord(runes)
+
 }
 func isDataAtPhrase(list lisp.List) bool {
 	if len(list) == 2 {
@@ -428,7 +449,7 @@ func isDataAtPhrase(list lisp.List) bool {
 		switch first.(type) {
 		case lisp.Atom:
 			// now check to see if it is the data-at keyword
-			if isLiteralValue(first.(lisp.Atom), DataAtKeyword) {
+			if equalsLiteralValue(first.(lisp.Atom), DataAtKeyword) {
 				// now check the second argument
 				second := list[1]
 				switch second.(type) {
@@ -453,8 +474,11 @@ func parseSet_FirstRegister(core *extendedCore, first byte, second interface{}) 
 			// we found a register!
 		} else if val, err := _parseNumber(str); err == nil {
 			// immediate form
-		} else {
+
+		} else if isLabel(at) {
 			// it is a label so we just save it for now
+		} else {
+			return fmt.Errorf("Unknown atom %s passed as second argument to (set r%d %s)!", at, first, at)
 		}
 	case lisp.List:
 		// arithmetic, compare, and some move
