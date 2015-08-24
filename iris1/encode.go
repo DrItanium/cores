@@ -33,97 +33,155 @@ const (
 )
 
 var registers_StringToByte map[string]byte
+var ucodeArithmeticSymbols = []struct {
+	Symbol, Src1 string
+	Op           byte
+}{
+	{Symbol: "+", Src1: "r", Op: ArithmeticOpAdd},
+	{Symbol: "-", Src1: "r", Op: ArithmeticOpSub},
+	{Symbol: "*", Src1: "r", Op: ArithmeticOpMul},
+	{Symbol: "/", Src1: "r", Op: ArithmeticOpDiv},
+	{Symbol: "mod", Src1: "r", Op: ArithmeticOpRem},
+	{Symbol: "<<", Src1: "r", Op: ArithmeticOpShiftLeft},
+	{Symbol: ">>", Src1: "r", Op: ArithmeticOpShiftRight},
+	{Symbol: "arithmetic-and", Src1: "r", Op: ArithmeticOpBinaryAnd},
+	{Symbol: "arithmetic-or", Src1: "r", Op: ArithmeticOpBinaryOr},
+	{Symbol: "arithmetic-not", Src1: "", Op: ArithmeticOpBinaryNot},
+	{Symbol: "arithmetic-xor", Src1: "r", Op: ArithmeticOpBinaryXor},
+	{Symbol: "1+", Src1: "r", Op: ArithmeticOpIncrement},
+	{Symbol: "1-", Src1: "r", Op: ArithmeticOpDecrement},
+	{Symbol: "2*", Src1: "r", Op: ArithmeticOpDouble},
+	{Symbol: "2/", Src1: "r", Op: ArithmeticOpHalve},
+	{Symbol: "+", Src1: "!", Op: ArithmeticOpAddImmediate},
+	{Symbol: "-", Src1: "!", Op: ArithmeticOpSubImmediate},
+	{Symbol: "*", Src1: "!", Op: ArithmeticOpMulImmediate},
+	{Symbol: "/", Src1: "!", Op: ArithmeticOpDivImmediate},
+	{Symbol: "mod", Src1: "!", Op: ArithmeticOpRemImmediate},
+	{Symbol: "<<", Src1: "!", Op: ArithmeticOpShiftLeftImmediate},
+	{Symbol: ">>", Src1: "!", Op: ArithmeticOpShiftRightImmediate},
+}
+
+var ucodeCompareSymbols = []struct {
+	Symbol        string
+	Combinatorial bool
+	CombineSymbol string
+	Op            byte
+}{
+	{Symbol: "=", Op: CompareOpEq},
+	{Symbol: "=", Combinatorial: true, CombineSymbol: "&&", Op: CompareOpEqAnd},
+	{Symbol: "=", Combinatorial: true, CombineSymbol: "||", Op: CompareOpEqOr},
+	{Symbol: "=", Combinatorial: true, CombineSymbol: "xor", Op: CompareOpEqXor},
+	{Symbol: "<>", Op: CompareOpNeq},
+	{Symbol: "<>", Combinatorial: true, CombineSymbol: "&&", Op: CompareOpNeqAnd},
+	{Symbol: "<>", Combinatorial: true, CombineSymbol: "||", Op: CompareOpNeqOr},
+	{Symbol: "<>", Combinatorial: true, CombineSymbol: "xor", Op: CompareOpNeqXor},
+	{Symbol: "<", Op: CompareOpLessThan},
+	{Symbol: "<", Combinatorial: true, CombineSymbol: "&&", Op: CompareOpLessThanAnd},
+	{Symbol: "<", Combinatorial: true, CombineSymbol: "||", Op: CompareOpLessThanOr},
+	{Symbol: "<", Combinatorial: true, CombineSymbol: "xor", Op: CompareOpLessThanXor},
+	{Symbol: ">", Op: CompareOpGreaterThan},
+	{Symbol: ">", Combinatorial: true, CombineSymbol: "&&", Op: CompareOpGreaterThanAnd},
+	{Symbol: ">", Combinatorial: true, CombineSymbol: "||", Op: CompareOpGreaterThanOr},
+	{Symbol: ">", Combinatorial: true, CombineSymbol: "xor", Op: CompareOpGreaterThanXor},
+	{Symbol: "<=", Op: CompareOpLessThanOrEqualTo},
+	{Symbol: "<=", Combinatorial: true, CombineSymbol: "&&", Op: CompareOpLessThanOrEqualToAnd},
+	{Symbol: "<=", Combinatorial: true, CombineSymbol: "||", Op: CompareOpLessThanOrEqualToOr},
+	{Symbol: "<=", Combinatorial: true, CombineSymbol: "xor", Op: CompareOpLessThanOrEqualToXor},
+	{Symbol: ">=", Op: CompareOpGreaterThanOrEqualTo},
+	{Symbol: ">=", Combinatorial: true, CombineSymbol: "&&", Op: CompareOpGreaterThanOrEqualToAnd},
+	{Symbol: ">=", Combinatorial: true, CombineSymbol: "||", Op: CompareOpGreaterThanOrEqualToOr},
+	{Symbol: ">=", Combinatorial: true, CombineSymbol: "xor", Op: CompareOpGreaterThanOrEqualToXor},
+}
+
+const (
+	ucodeRegisterSymbol  = "r"
+	ucodeImmediateSymbol = "!"
+	ucodeBinaryOpBase    = "(%s %s %s)"
+	ucodeUnaryOpBase     = "(%s %s)"
+	ucodeIfCondition     = "(if %s then %s)"
+	ucodeIfElseCondition = "(if %s then %s else %s)"
+)
+
+var notOp = fmt.Sprintf(ucodeUnaryOpBase, "not", ucodeRegisterSymbol)
+var setOpBase = fmt.Sprintf(ucodeBinaryOpBase, "set", "%s", "%s")
+var swapOpBase = fmt.Sprintf(ucodeBinaryOpBase, "swap", "%s", "%s")
+var arithmeticOpBase = fmt.Sprintf(setOpBase, ucodeRegisterSymbol, fmt.Sprintf(ucodeBinaryOpBase, "%s", ucodeRegisterSymbol, "%s"))
+var compareOpBase0 = fmt.Sprintf(setOpBase, ucodeRegisterSymbol, fmt.Sprintf(ucodeBinaryOpBase, "%s", ucodeRegisterSymbol, ucodeRegisterSymbol))
+var compareOpBase1 = fmt.Sprintf(setOpBase, ucodeRegisterSymbol, fmt.Sprintf(ucodeBinaryOpBase, "%s", ucodeRegisterSymbol, fmt.Sprintf(ucodeBinaryOpBase, "%s", ucodeRegisterSymbol, ucodeRegisterSymbol)))
+var jumpOpUnaryGoto = fmt.Sprintf(ucodeUnaryOpBase, "goto", "%s")
+var jumpOpUnaryCall = fmt.Sprintf(ucodeUnaryOpBase, "ucode", "%s")
+
+// generator strings
+var ucode map[string]string
 
 func init() {
-	genControlByte := func(op, group byte) byte {
-		return (op << 3) | group
+
+	genControlCode := func(group, op byte) string {
+		return fmt.Sprintf("(control (group %d) (op %d))", group, op)
 	}
-	keywordTranslationTable = map[string]byte{
-		// misc ops
-		"system": genControlByte(MiscOpSystemCall, InstructionGroupMisc),
-		// arithmetic ops
-		"add":    genControlByte(ArithmeticOpAdd, InstructionGroupArithmetic),
-		"addi":   genControlByte(ArithmeticOpAddImmediate, InstructionGroupArithmetic),
-		"sub":    genControlByte(ArithmeticOpSub, InstructionGroupArithmetic),
-		"subi":   genControlByte(ArithmeticOpSubImmediate, InstructionGroupArithmetic),
-		"mul":    genControlByte(ArithmeticOpMul, InstructionGroupArithmetic),
-		"muli":   genControlByte(ArithmeticOpMulImmediate, InstructionGroupArithmetic),
-		"div":    genControlByte(ArithmeticOpDiv, InstructionGroupArithmetic),
-		"divi":   genControlByte(ArithmeticOpDivImmediate, InstructionGroupArithmetic),
-		"rem":    genControlByte(ArithmeticOpRem, InstructionGroupArithmetic),
-		"remi":   genControlByte(ArithmeticOpRemImmediate, InstructionGroupArithmetic),
-		"shl":    genControlByte(ArithmeticOpShiftLeft, InstructionGroupArithmetic),
-		"shli":   genControlByte(ArithmeticOpShiftLeftImmediate, InstructionGroupArithmetic),
-		"shr":    genControlByte(ArithmeticOpShiftRight, InstructionGroupArithmetic),
-		"shri":   genControlByte(ArithmeticOpShiftRightImmediate, InstructionGroupArithmetic),
-		"and":    genControlByte(ArithmeticOpBinaryAnd, InstructionGroupArithmetic),
-		"or":     genControlByte(ArithmeticOpBinaryOr, InstructionGroupArithmetic),
-		"not":    genControlByte(ArithmeticOpBinaryNot, InstructionGroupArithmetic),
-		"xor":    genControlByte(ArithmeticOpBinaryXor, InstructionGroupArithmetic),
-		"incr":   genControlByte(ArithmeticOpIncrement, InstructionGroupArithmetic),
-		"decr":   genControlByte(ArithmeticOpDecrement, InstructionGroupArithmetic),
-		"double": genControlByte(ArithmeticOpDouble, InstructionGroupArithmetic),
-		"halve":  genControlByte(ArithmeticOpHalve, InstructionGroupArithmetic),
-		// compare ops
-		"eq":      genControlByte(CompareOpEq, InstructionGroupCompare),
-		"eq-and":  genControlByte(CompareOpEqAnd, InstructionGroupCompare),
-		"eq-or":   genControlByte(CompareOpEqOr, InstructionGroupCompare),
-		"eq-xor":  genControlByte(CompareOpEqXor, InstructionGroupCompare),
-		"neq":     genControlByte(CompareOpNeq, InstructionGroupCompare),
-		"neq-and": genControlByte(CompareOpNeqAnd, InstructionGroupCompare),
-		"neq-or":  genControlByte(CompareOpNeqOr, InstructionGroupCompare),
-		"neq-xor": genControlByte(CompareOpNeqXor, InstructionGroupCompare),
-		"lt":      genControlByte(CompareOpLessThan, InstructionGroupCompare),
-		"lt-and":  genControlByte(CompareOpLessThanAnd, InstructionGroupCompare),
-		"lt-or":   genControlByte(CompareOpLessThanOr, InstructionGroupCompare),
-		"lt-xor":  genControlByte(CompareOpLessThanXor, InstructionGroupCompare),
-		"le":      genControlByte(CompareOpLessThanOrEqualTo, InstructionGroupCompare),
-		"le-and":  genControlByte(CompareOpLessThanOrEqualToAnd, InstructionGroupCompare),
-		"le-or":   genControlByte(CompareOpLessThanOrEqualToOr, InstructionGroupCompare),
-		"le-xor":  genControlByte(CompareOpLessThanOrEqualToXor, InstructionGroupCompare),
-		"gt":      genControlByte(CompareOpGreaterThan, InstructionGroupCompare),
-		"gt-and":  genControlByte(CompareOpGreaterThanAnd, InstructionGroupCompare),
-		"gt-or":   genControlByte(CompareOpGreaterThanOr, InstructionGroupCompare),
-		"gt-xor":  genControlByte(CompareOpGreaterThanXor, InstructionGroupCompare),
-		"ge":      genControlByte(CompareOpGreaterThanOrEqualTo, InstructionGroupCompare),
-		"ge-and":  genControlByte(CompareOpGreaterThanOrEqualToAnd, InstructionGroupCompare),
-		"ge-or":   genControlByte(CompareOpGreaterThanOrEqualToOr, InstructionGroupCompare),
-		"ge-xor":  genControlByte(CompareOpGreaterThanOrEqualToXor, InstructionGroupCompare),
-		// Jump operations
-		"goto-imm":        genControlByte(JumpOpUnconditionalImmediate, InstructionGroupJump),
-		"call-imm":        genControlByte(JumpOpUnconditionalImmediateCall, InstructionGroupJump),
-		"goto-reg":        genControlByte(JumpOpUnconditionalRegister, InstructionGroupJump),
-		"call-reg":        genControlByte(JumpOpUnconditionalRegisterCall, InstructionGroupJump),
-		"goto-imm-if1":    genControlByte(JumpOpConditionalTrueImmediate, InstructionGroupJump),
-		"call-imm-if1":    genControlByte(JumpOpConditionalTrueImmediateCall, InstructionGroupJump),
-		"goto-imm-if0":    genControlByte(JumpOpConditionalFalseImmediate, InstructionGroupJump),
-		"call-imm-if0":    genControlByte(JumpOpConditionalFalseImmediateCall, InstructionGroupJump),
-		"goto-reg-if1":    genControlByte(JumpOpConditionalTrueRegister, InstructionGroupJump),
-		"call-reg-if1":    genControlByte(JumpOpConditionalTrueRegisterCall, InstructionGroupJump),
-		"goto-reg-if0":    genControlByte(JumpOpConditionalFalseRegister, InstructionGroupJump),
-		"call-reg-if0":    genControlByte(JumpOpConditionalFalseRegisterCall, InstructionGroupJump),
-		"call-select-if1": genControlByte(JumpOpIfThenElseCallPredTrue, InstructionGroupJump),
-		"call-select-if0": genControlByte(JumpOpIfThenElseCallPredFalse, InstructionGroupJump),
-		"goto-select-if1": genControlByte(JumpOpIfThenElseNormalPredTrue, InstructionGroupJump),
-		"goto-select-if0": genControlByte(JumpOpIfThenElseNormalPredFalse, InstructionGroupJump),
-		// move operations
-		"move":           genControlByte(MoveOpMove, InstructionGroupMove),
-		"swap":           genControlByte(MoveOpSwap, InstructionGroupMove),
-		"swap-reg-addr":  genControlByte(MoveOpSwapRegAddr, InstructionGroupMove),
-		"swap-addr-addr": genControlByte(MoveOpSwapAddrAddr, InstructionGroupMove),
-		"swap-reg-mem":   genControlByte(MoveOpSwapRegMem, InstructionGroupMove),
-		"swap-addr-mem":  genControlByte(MoveOpSwapAddrMem, InstructionGroupMove),
-		"set":            genControlByte(MoveOpSet, InstructionGroupMove),
-		"load":           genControlByte(MoveOpLoad, InstructionGroupMove),
-		"load-mem":       genControlByte(MoveOpLoadMem, InstructionGroupMove),
-		"store":          genControlByte(MoveOpStore, InstructionGroupMove),
-		"store-addr":     genControlByte(MoveOpStoreAddr, InstructionGroupMove),
-		"store-mem":      genControlByte(MoveOpStoreMem, InstructionGroupMove),
-		"store-imm":      genControlByte(MoveOpStoreImm, InstructionGroupMove),
-		"push":           genControlByte(MoveOpPush, InstructionGroupMove),
-		"push-imm":       genControlByte(MoveOpPushImmediate, InstructionGroupMove),
-		"pop":            genControlByte(MoveOpPop, InstructionGroupMove),
-		"peek":           genControlByte(MoveOpPeek, InstructionGroupMove),
+	jumpCode := func(op byte) string {
+		return genControlCode(InstructionGroupJump, op)
+	}
+	moveCode := func(op byte) string {
+		return genControlCode(InstructionGroupMove, op)
+	}
+	arithmeticCode := func(op byte) string {
+		return genControlCode(InstructionGroupArithmetic, op)
+	}
+	compareCode := func(op byte) string {
+		return genControlCode(InstructionGroupCompare, op)
+	}
+	ucode = map[string]string{
+		// jump operations
+		"(goto !)":                          jumpCode(JumpOpUnconditionalImmediate),
+		"(goto r)":                          jumpCode(JumpOpUnconditionalRegister),
+		"(call !)":                          jumpCode(JumpOpUnconditionalImmediateCall),
+		"(call r)":                          jumpCode(JumpOpUnconditionalRegisterCall),
+		"(if r then (goto !))":              jumpCode(JumpOpConditionalTrueImmediate),
+		"(if (not r) then (goto !))":        jumpCode(JumpOpConditionalFalseImmediate),
+		"(if r then (goto r))":              jumpCode(JumpOpConditionalTrueRegister),
+		"(if (not r) then (goto r))":        jumpCode(JumpOpConditionalFalseRegister),
+		"(if r then (call !))":              jumpCode(JumpOpConditionalTrueImmediateCall),
+		"(if (not r) then (call !))":        jumpCode(JumpOpConditionalFalseImmediateCall),
+		"(if r then (call r))":              jumpCode(JumpOpConditionalTrueRegisterCall),
+		"(if (not r) then (call r))":        jumpCode(JumpOpConditionalFalseRegisterCall),
+		"(goto (if r then r else r))":       jumpCode(JumpOpIfThenElseNormalPredTrue),
+		"(goto (if (not r) then r else r))": jumpCode(JumpOpIfThenElseNormalPredFalse),
+		"(call (if r then r else r))":       jumpCode(JumpOpIfThenElseCallPredTrue),
+		"(call (if (not r) then r else r))": jumpCode(JumpOpIfThenElseCallPredFalse),
+		// move forms
+		"(set r r)":                        moveCode(MoveOpMove),
+		"(set r !)":                        moveCode(MoveOpSet),
+		"(swap r r)":                       moveCode(MoveOpSwap),
+		"(swap r (data-at r))":             moveCode(MoveOpSwapRegAddr),
+		"(swap (data-at r) (data-at r))":   moveCode(MoveOpSwapAddrAddr),
+		"(swap r (data-at !))":             moveCode(MoveOpSwapRegMem),
+		"(swap (data-at r) (data-at !))":   moveCode(MoveOpSwapAddrMem),
+		"(set r (data-at r))":              moveCode(MoveOpLoad),
+		"(set r (data-at !))":              moveCode(MoveOpLoadMem),
+		"(set (data-at r) r)":              moveCode(MoveOpStore),
+		"(set (data-at r) (data-at r))":    moveCode(MoveOpStoreAddr),
+		"(set (data-at r100) (data-at !))": moveCode(MoveOpStoreMem),
+		"(set (data-at r100) !)":           moveCode(MoveOpStoreImm),
+		"(push r)":                         moveCode(MoveOpPush),
+		"(push !)":                         moveCode(MoveOpPushImmediate),
+		"(pop r)":                          moveCode(MoveOpPop),
+		"(peek r)":                         moveCode(MoveOpPeek),
+	}
+	arithmeticString := "(set r (%s r %s))"
+	for _, element := range ucodeArithmeticSymbols {
+		ucode[fmt.Sprintf(arithmeticString, element.Symbol, element.Src1)] = arithmeticCode(element.Op)
+	}
+	combinatorialCompareString := "(set r (%s r (%s r r)))"
+	compareString := "(set r (%s r r))"
+	for _, element := range ucodeCompareSymbols {
+		var msg string
+		if element.Combinatorial {
+			msg = fmt.Sprintf(combinatorialCompareString, element.CombineSymbol, element.Symbol)
+		} else {
+			msg = fmt.Sprintf(compareString, element.Symbol)
+		}
+		ucode[msg] = compareCode(element.Op)
 	}
 	// setup the keywords and register parsers
 	registers = keyword.New()
