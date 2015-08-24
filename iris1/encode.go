@@ -27,6 +27,10 @@ func GetEncoder() translation.Encoder {
 	return translator(parse)
 }
 
+const (
+	DataAtKeyword = "data-at"
+)
+
 var registers_StringToByte map[string]byte
 
 func init() {
@@ -336,6 +340,21 @@ func _parseBinaryNumber(input string) (Word, error) {
 func _parseDecimalNumber(input string) (Word, error) {
 	return _parseGenericNumber(0, "", input)
 }
+func _parseNumber(input string) (Word, error) {
+	if val, err := _parseDecimalNumber(input); err == nil {
+		return val, nil
+	} else if val, err = _parseBinaryNumber(input); err == nil {
+		return val, nil
+	} else if val, err = _parseHexNumber(input); err == nil {
+		return val, nil
+	} else {
+		return 0, fmt.Errorf("Couldn't parse given input: %s", err)
+	}
+}
+func isNumber(input string) bool {
+	_, err := _parseNumber(input)
+	return err == nil
+}
 
 func _parseList(core *extendedCore, l lisp.List) error {
 	// use the first arg as the op and the rest as arguments
@@ -395,23 +414,76 @@ func parseThreeElementList(core *extendedCore, list lisp.List) error {
 		return fmt.Errorf("First element of %s is not an atom, it is a %t!", list, t)
 	}
 }
-func parseSetSecondArg_FirstRegister(core *extendedCore, first byte, second interface{}) error {
-	// labels are going to be a little strange
+func isKeywordOrNumber(atom lisp.Atom) bool {
+	str := atom.String()
+	return registers.IsKeyword(str) || isNumber(str)
+}
+func isLiteralValue(atom lisp.Atom, str string) bool {
+	return str == atom.String()
+}
+func isDataAtPhrase(list lisp.List) bool {
+	if len(list) == 2 {
+		// we need to go through this
+		first := list[0]
+		switch first.(type) {
+		case lisp.Atom:
+			// now check to see if it is the data-at keyword
+			if isLiteralValue(first.(lisp.Atom), DataAtKeyword) {
+				// now check the second argument
+				second := list[1]
+				switch second.(type) {
+				case lisp.Atom:
+					return isKeywordOrNumber(second.(lisp.Atom))
+				default:
+				}
+			}
+		default:
+		}
+	}
+	return false
+}
+func parseSet_FirstRegister(core *extendedCore, first byte, second interface{}) error {
 	switch t := second.(type) {
 	case lisp.Atom:
-		// can be an immediate, label, or register
-		car := second.(lisp.Atom)
-		str := car.String()
+		// move
+		at := second.(lisp.Atom)
+		str := at.String()
+		// can either be an immediate or a register
 		if registers.IsKeyword(str) {
-			// if we have a register then it is a move
-
+			// we found a register!
+		} else if val, err := _parseNumber(str); err == nil {
+			// immediate form
+		} else {
+			// it is a label so we just save it for now
 		}
-		return nil
 	case lisp.List:
-		return nil
+		// arithmetic, compare, and some move
+		// we now check the contents of the sublist
+		sublist := second.(lisp.List)
+		if isDataAtPhrase(sublist) {
+
+		} else {
+			return fmt.Errorf("Unknown sublist %s provided as second argument to set function", sublist)
+		}
 	default:
 		return fmt.Errorf("Second argument of (set r%d %s) is of disallowed type %t!", first, second, t)
 	}
+	return nil
+}
+func parseSet_FirstList(core *extendedCore, first lisp.List, second interface{}) error {
+	switch t := second.(type) {
+	case lisp.Atom:
+	case lisp.List:
+		sublist := second.(lisp.List)
+		if isDataAtPhrase(sublist) {
+
+		} else {
+			return fmt.Errorf("Unknown sublist %s provided as second argument to set function!", sublist)
+		}
+	default:
+		return fmt.Errorf("Second argument of (set %s %s) is of disallowed type %t!", first, second, t)
+	}
+	return nil
 }
 func parseSet(core *extendedCore, args lisp.List) error {
 	first := args[0]
@@ -420,17 +492,16 @@ func parseSet(core *extendedCore, args lisp.List) error {
 	switch tFirst := first.(type) {
 	case lisp.Atom:
 		// we are now dealing with either arithmetic, move, or compare ops
-		fAtom := first.(lisp.Atom)
-		str := fAtom.String()
+		str := first.(lisp.Atom).String()
 		if registers.IsKeyword(str) {
 			// now we need to checkout the second argument
-			return parseSetSecondArg_FirstRegister(core, registers_StringToByte[str], second)
+			return parseSet_FirstRegister(core, registers_StringToByte[str], second)
 		} else {
 			return fmt.Errorf("First argument of (set %s %s) is not a register!", first, second)
 		}
 	case lisp.List:
 		// this goes to the move operations
-		return nil
+		return parseSet_FirstList(core, first.(lisp.List), second)
 	default:
 		return fmt.Errorf("First argument of (set %s %s) is of incorrect type %t!", first, second, tFirst)
 	}
