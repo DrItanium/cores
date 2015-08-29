@@ -240,6 +240,53 @@ func atomOfImm16(value interface{}) (Word, error) {
 	return Word(val), err
 }
 
+type µcodeNetworkNode interface {
+	Populate(lisp.List, instructionBuilder) error
+}
+
+func (this instructionBuilder) set(name string, value interface{}) error {
+	val, ok := this[name]
+	if !ok {
+		this[name] = value
+	} else if val != value {
+		return fmt.Errorf("Provided a different value for field %s, expected %s but got %s instead!", name, val, value)
+	}
+	return nil
+}
+
+func (this instructionBuilder) get(name string) (bool, interface{}) {
+	val, result := this[name]
+	return result, val
+}
+
+type µcodePopulator func(interface{}, instructionBuilder) error
+
+func (this µcodePopulator) Populate(a interface{}, b instructionBuilder) error {
+	return this(a, b)
+}
+
+/*
+func atomCheckForSymbol(value interface{}) (µcodeNetworkNode, error) {
+	if s, err := asAtom(value); err != nil {
+		return nil, fmt.Errorf("Provided value was not an atom. Actual message: %s", err)
+	} else {
+		symbol := s.String()
+		return µcodePopulator(func(l interface{}, _ instructionBuilder) error {
+			_, err := atomOfSymbol(l, symbol)
+			return err
+		}), nil
+	}
+}
+func µcodeParseMatcher(µcode string) (µcodeNetworkNode, error) {
+	// this is the unpacked list we get from parsing
+	if list, err := lisp.ParseString(µcode); err != nil {
+		return nil, err
+	} else {
+
+	}
+	return nil, nil
+}
+*/
 func init() {
 
 	genControlCode := func(group, op byte) string {
