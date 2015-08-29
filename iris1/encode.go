@@ -309,25 +309,51 @@ func explicitSymbolMatch(symb string) µcodePopulator {
 	})
 }
 
-type µcodeListMatcher struct {
-	matches []µcodePopulator
-}
+type µcodeListMatcher []µcodePopulator
 
-func (this *µcodeListMatcher) Matches(l interface{}, bld instructionBuilder) error {
+func (this µcodeListMatcher) Matches(l interface{}, bld instructionBuilder) error {
 	if list, err := asList(l); err != nil {
 		return err
 	} else {
-		if len(this.matches) != len(list) {
+		if len(this) != len(list) {
 			return fmt.Errorf("Length mismatch, immediate termination!")
 		}
 		// the order of matches is important and so we terminate out of the current matcher if we get an error (or mismatch)
-		for ind, fn := range this.matches {
+		for ind, fn := range this {
 			if err := fn.Matches(list[ind], bld); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
+}
+
+func getAtomPopulator(atom lisp.Atom) µcodePopulator {
+	str := atom.String()
+	if val, ok := variableTranslations[str]; ok {
+		return val
+	} else {
+		return explicitSymbolMatch(str)
+	}
+}
+
+func getListPopulator(list lisp.List) (µcodePopulator, error) {
+	var v µcodeListMatcher
+	for _, val := range list {
+		switch t := val.(type) {
+		case lisp.List:
+			if nestL, err := getListPopulator(val.(lisp.List)); err != nil {
+				return nil, err
+			} else {
+				v = append(v, nestL)
+			}
+		case lisp.Atom:
+			v = append(v, getAtomPopulator(val.(lisp.Atom)))
+		default:
+			return nil, fmt.Errorf("Found unexpected type %t in a list!", t)
+		}
+	}
+	return v, nil
 }
 
 var variableTranslations = map[string]µcodePopulator{
