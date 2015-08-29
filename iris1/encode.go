@@ -139,8 +139,6 @@ func isSpecificSymbol(str string) func(lisp.Atom) bool {
 	}
 }
 
-type instructionBuilder map[string]interface{}
-
 func parseNumber(atom lisp.Atom, width int) (byte, error) {
 	str := atom.String()
 	if num, err := strconv.ParseUint(str, 10, width); err != nil {
@@ -244,6 +242,8 @@ type µcodeNetworkNode interface {
 	Populate(lisp.List, instructionBuilder) error
 }
 
+type instructionBuilder map[string]interface{}
+
 func (this instructionBuilder) set(name string, value interface{}) error {
 	val, ok := this[name]
 	if !ok {
@@ -261,8 +261,88 @@ func (this instructionBuilder) get(name string) (bool, interface{}) {
 
 type µcodePopulator func(interface{}, instructionBuilder) error
 
-func (this µcodePopulator) Populate(a interface{}, b instructionBuilder) error {
-	return this(a, b)
+var variableTranslations = map[string]µcodePopulator{
+	"?dest": func(l interface{}, bld instructionBuilder) error {
+		//TODO: add support for aliasing registers
+		if reg, err := atomOfRegister(l); err != nil {
+			return err
+		} else if ok, content := bld.get("?dest"); ok {
+			dat := content.(byte)
+			if dat != reg {
+				return fmt.Errorf("Attempted to reassign ?dest from %d to %d. This is not allowed!", dat, reg)
+			}
+		} else {
+			bld.set("?dest", reg)
+		}
+		return nil
+	},
+	"?src0": func(l interface{}, bld instructionBuilder) error {
+		//TODO: add support for aliasing registers
+		if reg, err := atomOfRegister(l); err != nil {
+			return err
+		} else if ok, content := bld.get("?src0"); ok {
+			dat := content.(byte)
+			if dat != reg {
+				return fmt.Errorf("Attempted to reassign ?src0 from %d to %d. This is not allowed!", dat, reg)
+			}
+		} else {
+			bld.set("?src0", reg)
+		}
+		return nil
+	},
+	"?src1": func(l interface{}, bld instructionBuilder) error {
+		//TODO: add support for aliasing registers
+		if reg, err := atomOfRegister(l); err != nil {
+			return err
+		} else if ok, content := bld.get("?src1"); ok {
+			dat := content.(byte)
+			if dat != reg {
+				return fmt.Errorf("Attempted to reassign ?src1 from %d to %d. This is not allowed!", dat, reg)
+			}
+		} else {
+			bld.set("?src1", reg)
+		}
+		return nil
+	},
+	"?word": func(l interface{}, bld instructionBuilder) error {
+		if word, err := atomOfImm16(l); err == nil {
+			if ok, v := bld.get("?word"); ok {
+				switch v.(type) {
+				case Word:
+					dat := v.(Word)
+					if word != dat {
+						return fmt.Errorf("Attempted to reassign ?word from %d to %d", dat, word)
+					}
+				default:
+					// it is a mismatch
+					return fmt.Errorf("Attempted to reassign ?word from %s to %d", v, word)
+				}
+			} else {
+				bld.set("?word", word)
+			}
+		} else if reg, err := atomOfRegister(l); err == nil {
+			// we can't be a register!
+			return fmt.Errorf("Attempted to assign ?word to register r%d!", reg)
+		} else if atom, err := asAtom(l); err != nil {
+			return err
+		} else {
+			str := atom.String()
+			if ok, v := bld.get("?word"); ok {
+				switch v.(type) {
+				case string:
+					dat := v.(string)
+					if str != dat {
+						return fmt.Errorf("Attempted to reassign ?word from %s to %s", dat, str)
+					}
+				default:
+					return fmt.Errorf("Attempted to reassign ?word from %s to %s", v, str)
+				}
+			} else {
+				bld.set("?word", str)
+			}
+		}
+		return nil
+	},
 }
 
 /*
