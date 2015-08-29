@@ -261,49 +261,68 @@ func (this instructionBuilder) get(name string) (bool, interface{}) {
 
 type µcodePopulator func(interface{}, instructionBuilder) error
 
+func setImm8(l interface{}, bld instructionBuilder, field string) error {
+	if word, err := atomOfImm8(l); err == nil {
+		if ok, v := bld.get(field); ok {
+			switch v.(type) {
+			case byte:
+				dat := v.(byte)
+				if word != dat {
+					return fmt.Errorf("Attempted to reassign %s from %d to %d", field, dat, word)
+				}
+			default:
+				// it is a mismatch
+				return fmt.Errorf("Attempted to reassign %s from %s to %d", field, v, word)
+			}
+		} else {
+			bld.set(field, word)
+		}
+	} else if reg, err := atomOfRegister(l); err == nil {
+		// we can't be a register!
+		return fmt.Errorf("Attempted to assign %s to register r%d!", field, reg)
+	} else if atom, err := asAtom(l); err != nil {
+		return err
+	} else {
+		str := atom.String()
+		if ok, v := bld.get(field); ok {
+			switch v.(type) {
+			case string:
+				dat := v.(string)
+				if str != dat {
+					return fmt.Errorf("Attempted to reassign %s from %s to %s", field, dat, str)
+				}
+			default:
+				return fmt.Errorf("Attempted to reassign %s from %s to %s", field, v, str)
+			}
+		} else {
+			bld.set(field, str)
+		}
+	}
+	return nil
+}
+
+func setRegister(l interface{}, bld instructionBuilder, field string) error {
+	//TODO: add support for aliasing registers
+	if reg, err := atomOfRegister(l); err != nil {
+		return err
+	} else if ok, content := bld.get(field); ok {
+		dat := content.(byte)
+		if dat != reg {
+			return fmt.Errorf("Attempted to reassign %s from %d to %d. This is not allowed!", field, dat, reg)
+		}
+	} else {
+		bld.set(field, reg)
+	}
+	return nil
+}
+
 var variableTranslations = map[string]µcodePopulator{
-	"?dest": func(l interface{}, bld instructionBuilder) error {
-		//TODO: add support for aliasing registers
-		if reg, err := atomOfRegister(l); err != nil {
-			return err
-		} else if ok, content := bld.get("?dest"); ok {
-			dat := content.(byte)
-			if dat != reg {
-				return fmt.Errorf("Attempted to reassign ?dest from %d to %d. This is not allowed!", dat, reg)
-			}
-		} else {
-			bld.set("?dest", reg)
-		}
-		return nil
-	},
-	"?src0": func(l interface{}, bld instructionBuilder) error {
-		//TODO: add support for aliasing registers
-		if reg, err := atomOfRegister(l); err != nil {
-			return err
-		} else if ok, content := bld.get("?src0"); ok {
-			dat := content.(byte)
-			if dat != reg {
-				return fmt.Errorf("Attempted to reassign ?src0 from %d to %d. This is not allowed!", dat, reg)
-			}
-		} else {
-			bld.set("?src0", reg)
-		}
-		return nil
-	},
-	"?src1": func(l interface{}, bld instructionBuilder) error {
-		//TODO: add support for aliasing registers
-		if reg, err := atomOfRegister(l); err != nil {
-			return err
-		} else if ok, content := bld.get("?src1"); ok {
-			dat := content.(byte)
-			if dat != reg {
-				return fmt.Errorf("Attempted to reassign ?src1 from %d to %d. This is not allowed!", dat, reg)
-			}
-		} else {
-			bld.set("?src1", reg)
-		}
-		return nil
-	},
+	"?dest":   func(l interface{}, bld instructionBuilder) error { return setRegister(l, bld, "?dest") },
+	"?src0":   func(l interface{}, bld instructionBuilder) error { return setRegister(l, bld, "?src0") },
+	"?src1":   func(l interface{}, bld instructionBuilder) error { return setRegister(l, bld, "?src1") },
+	"?vector": func(l interface{}, bld instructionBuilder) error { return setImm8(l, bld, "?vector") },
+	"?upper":  func(l interface{}, bld instructionBuilder) error { return setImm8(l, bld, "?upper") },
+	"?lower":  func(l interface{}, bld instructionBuilder) error { return setImm8(l, bld, "?lower") },
 	"?word": func(l interface{}, bld instructionBuilder) error {
 		if word, err := atomOfImm16(l); err == nil {
 			if ok, v := bld.get("?word"); ok {
@@ -345,28 +364,6 @@ var variableTranslations = map[string]µcodePopulator{
 	},
 }
 
-/*
-func atomCheckForSymbol(value interface{}) (µcodeNetworkNode, error) {
-	if s, err := asAtom(value); err != nil {
-		return nil, fmt.Errorf("Provided value was not an atom. Actual message: %s", err)
-	} else {
-		symbol := s.String()
-		return µcodePopulator(func(l interface{}, _ instructionBuilder) error {
-			_, err := atomOfSymbol(l, symbol)
-			return err
-		}), nil
-	}
-}
-func µcodeParseMatcher(µcode string) (µcodeNetworkNode, error) {
-	// this is the unpacked list we get from parsing
-	if list, err := lisp.ParseString(µcode); err != nil {
-		return nil, err
-	} else {
-
-	}
-	return nil, nil
-}
-*/
 func init() {
 
 	genControlCode := func(group, op byte) string {
