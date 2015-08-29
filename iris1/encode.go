@@ -230,6 +230,10 @@ func (this instructionBuilder) get(name string) (bool, interface{}) {
 	return result, val
 }
 
+const (
+	context = "context"
+)
+
 type µcodePopulator interface {
 	Matches(interface{}, instructionBuilder) error
 }
@@ -356,6 +360,61 @@ func getListPopulator(list lisp.List) (µcodePopulator, error) {
 	return v, nil
 }
 
+func getPopulator(l interface{}) (µcodePopulator, error) {
+	switch t := l.(type) {
+	case lisp.List:
+		return getListPopulator(l.(lisp.List))
+	case lisp.Atom:
+		return getAtomPopulator(l.(lisp.Atom)), nil
+	default:
+		return nil, fmt.Errorf("Attempted to get populator for type %t", t)
+	}
+}
+
+// represents a match and outcome
+type network struct {
+	match µcodePopulator
+	value byte
+}
+
+func (this *network) Matches(l interface{}, bld instructionBuilder) error {
+	if err := this.match.Matches(l, bld); err != nil {
+		return err
+	} else {
+		bld.set("instruction", this.value)
+		return nil
+	}
+}
+
+func newNetwork(pat, ctrl string) (*network, error) {
+	if pattern, err := lisp.ParseString(pat); err != nil {
+		return nil, err
+	} else if control, err := lisp.ParseString(ctrl); err != nil {
+		return nil, err
+	} else {
+		var n network
+		// okay now we need to setup the control value, but first check the size
+		if len(control) != 1 {
+			return nil, fmt.Errorf("Control µcode is malformed! There are too many elements at the top level, expected %d but got %d!", 1, len(control))
+		} else if control, err := parseControlEncoding(control[0]); err != nil {
+			return nil, err
+		} else {
+			n.value = control
+		}
+
+		// Now generate the match network
+		//TODO: lift this check once if more expressiveness is needed!
+		if len(pattern) != 1 {
+			return nil, fmt.Errorf("basic patterns must have only one element")
+		} else if network, err := getPopulator(pattern[0]); err != nil {
+			return nil, err
+		} else {
+			n.match = network
+		}
+		return &n, nil
+	}
+}
+
 var variableTranslations = map[string]µcodePopulator{
 	"?dest":   µcodePopulatorFunc(func(l interface{}, bld instructionBuilder) error { return setRegister(l, bld, "?dest") }),
 	"?src0":   µcodePopulatorFunc(func(l interface{}, bld instructionBuilder) error { return setRegister(l, bld, "?src0") }),
@@ -402,7 +461,27 @@ var variableTranslations = map[string]µcodePopulator{
 		}
 		return nil
 	}),
+	"?lexeme": µcodePopulatorFunc(func(l interface{}, _ instructionBuilder) error {
+		if atom, err := asAtom(l); err != nil {
+			return err
+		} else {
+			str := atom.String()
+			if _, err := strconv.ParseUint(str, 10, 64); err == nil {
+				return fmt.Errorf("Provided atom value %s is not a legal lexeme (it can be parsed as a base10 number)!", str)
+			} else if _, err := strconv.ParseUint(str, 16, 64); err == nil {
+				return fmt.Errorf("Provided atom value %s is not a legal lexeme (it can be parsed as a base16 number)!", str)
+			} else if _, err := strconv.ParseUint(str, 2, 64); err == nil {
+				return fmt.Errorf("Provided atom value %s is not a legal lexeme (it can be parsed as a base2 number)!", str)
+			} else if registers.IsKeyword(str) {
+				return fmt.Errorf("Provided atom value %s is not a legal lexeme (it can be parsed as a register value)!", str)
+			} else {
+				// access the builder context so we can register the functions
+				return nil
+			}
+		}
+	}),
 }
+var asmDirectives = map[string]string{}
 
 func init() {
 
@@ -495,10 +574,11 @@ func init() {
 	// directives
 	directives.AddKeywordList([]string{
 		"label",
+		"bind",
 		"org",
-		"segment",
+		"code",
+		"data",
 		"value",
-		"string",
 	})
 
 	// now setup the match "network"
