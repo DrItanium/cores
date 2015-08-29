@@ -310,6 +310,24 @@ func explicitSymbolMatch(symb string) µcodePopulator {
 }
 
 type µcodeListMatcher struct {
+	matches []µcodePopulator
+}
+
+func (this *µcodeListMatcher) Matches(l interface{}, bld instructionBuilder) error {
+	if list, err := asList(l); err != nil {
+		return err
+	} else {
+		if len(this.matches) != len(list) {
+			return fmt.Errorf("Length mismatch, immediate termination!")
+		}
+		// the order of matches is important and so we terminate out of the current matcher if we get an error (or mismatch)
+		for ind, fn := range this.matches {
+			if err := fn.Matches(list[ind], bld); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 }
 
 var variableTranslations = map[string]µcodePopulator{
