@@ -136,6 +136,108 @@ func newNetworkNode(list lisp.List) (*networkNode, error) {
 
 var top *networkNode
 */
+func asList(value interface{}) (lisp.List, error) {
+	switch t := value.(type) {
+	case lisp.List:
+		return value.(lisp.List), nil
+	default:
+		return nil, fmt.Errorf("Value of type %t is not a lisp.List", t)
+	}
+}
+func asAtom(value interface{}) (lisp.Atom, error) {
+	switch t := value.(type) {
+	case lisp.Atom:
+		return value.(lisp.Atom), nil
+	default:
+		return nil, fmt.Errorf("Value of type %t is not a lisp.Atom", t)
+	}
+}
+func isSymbol(atom lisp.Atom, value string) bool {
+	return atom.String() == value
+}
+func isImmediate(atom lisp.Atom) bool {
+	return isImmediate16(atom) || isImmediate8(atom)
+}
+func isImmediate16(atom lisp.Atom) bool {
+	return isSymbol(atom, "i16")
+}
+func isImmediate8(atom lisp.Atom) bool {
+	return isSymbol(atom, "i8")
+}
+func isDestinationRegister(atom lisp.Atom) bool {
+	return isSymbol(atom, "r:dest")
+}
+func isSource0Register(atom lisp.Atom) bool {
+	return isSymbol(atom, "r:src0")
+}
+func isSource1Register(atom lisp.Atom) bool {
+	return isSymbol(atom, "r:src1")
+}
+func isSpecificSymbol(str string) func(lisp.Atom) bool {
+	return func(at lisp.Atom) bool {
+		return isSymbol(at, str)
+	}
+}
+
+type instructionBuilder map[string]interface{}
+
+func parseNumber(atom lisp.Atom, width int) (byte, error) {
+	str := atom.String()
+	if num, err := strconv.ParseUint(str, 10, width); err != nil {
+		return 0, err
+	} else {
+		return byte(num), nil
+	}
+}
+func listOfLength(value interface{}, count int) (lisp.List, error) {
+	if l, err := asList(value); err != nil {
+		return nil, err
+	} else if len(l) != count {
+		return nil, fmt.Errorf("expected list to be of length %d but it was actually %d", count, len(l))
+	} else {
+		return l, nil
+	}
+}
+func atomOfSymbol(value interface{}, symb string) (lisp.Atom, error) {
+	if atom, err := asAtom(value); err != nil {
+		return nil, err
+	} else if !isSymbol(atom, symb) {
+		return nil, fmt.Errorf("Expected symbol %s but got %s instead.", symb, atom.String())
+	} else {
+		return atom, nil
+	}
+}
+func parseTupleStringNumber(list interface{}, title string, width int) (byte, error) {
+	if l, err := listOfLength(list, 2); err != nil {
+		return 0, err
+	} else if _, err := atomOfSymbol(l[0], title); err != nil {
+		return 0, err
+	} else if val, err := asAtom(l[1]); err != nil {
+		return 0, err
+	} else {
+		return parseNumber(val, width)
+	}
+}
+func parseGroupEncoding(list interface{}) (byte, error) {
+	return parseTupleStringNumber(list, "group", 3)
+}
+func parseOpEncoding(list interface{}) (byte, error) {
+	return parseTupleStringNumber(list, "op", 5)
+}
+
+func parseControlEncoding(q interface{}) (byte, error) {
+	if lst, err := listOfLength(q, 3); err != nil {
+		return 0, err
+	} else if _, err := atomOfSymbol(lst[0], "control"); err != nil {
+		return 0, err
+	} else if group, err := parseGroupEncoding(lst[1]); err != nil {
+		return 0, err
+	} else if op, err := parseOpEncoding(lst[2]); err != nil {
+		return 0, err
+	} else {
+		return byte(op<<3) | group, nil
+	}
+}
 
 func init() {
 
@@ -153,6 +255,9 @@ func init() {
 	}
 	compareCode := func(op byte) string {
 		return genControlCode(InstructionGroupCompare, op)
+	}
+	miscCode := func(op byte) string {
+		return genControlCode(InstructionGroupMisc, op)
 	}
 	µcode = map[string]string{
 		// jump operations
@@ -190,6 +295,8 @@ func init() {
 		"(push i16)":                               moveCode(MoveOpPushImmediate),
 		"(pop r:dest)":                             moveCode(MoveOpPop),
 		"(peek r:dest)":                            moveCode(MoveOpPeek),
+		// misc
+		"(system i8 r:src0 r:src1)": miscCode(MiscOpSystemCall),
 	}
 	arithmeticString := "(set r:dest (%s r:src0 %s))"
 	for _, element := range µcodeArithmeticSymbols {
@@ -230,7 +337,6 @@ func init() {
 	})
 
 	// now setup the match "network"
-
 }
 
 type segment struct {
@@ -555,7 +661,7 @@ func parseSet_FirstRegister(core *extendedCore, first byte, second interface{}) 
 		// can either be an immediate or a register
 		if registers.IsKeyword(str) {
 			// we found a register!
-		} else if val, err := _parseNumber(str); err == nil {
+		} else if _, err := _parseNumber(str); err == nil {
 			// immediate form
 
 		} else if isLabel(at) {
