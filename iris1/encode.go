@@ -96,46 +96,6 @@ var µcodeCompareSymbols = []struct {
 // generator strings
 var µcode map[string]string
 
-type networkMatcher func(interface{}) bool
-
-/*
-// the network used to perform matching
-type networkNode struct {
-	fn       networkMatcher
-	collect  bool
-	children []*networkNode
-}
-
-func (this *networkNode) Match(cell interface{}) bool {
-	return this.fn(cell)
-}
-func newNetworkNode(list lisp.List) (*networkNode, error) {
-	if len(list) == 0 {
-		return nil, fmt.Errorf("empty list!")
-	}
-	first := list[0]
-	switch t := first.(type) {
-	case lisp.Atom:
-		at := first.(lisp.Atom)
-		str := at.String()
-		if str == "r" {
-			// it is a register so check for that
-		} else if str == "i8" {
-
-		} else if str == "i16" {
-
-		} else {
-
-		}
-	case lisp.List:
-	default:
-		return nil, fmt.Errorf("unknown type %t found during µcode network creation!", t)
-	}
-	return nil, nil
-}
-
-var top *networkNode
-*/
 func asList(value interface{}) (lisp.List, error) {
 	switch t := value.(type) {
 	case lisp.List:
@@ -237,6 +197,47 @@ func parseControlEncoding(q interface{}) (byte, error) {
 	} else {
 		return byte(op<<3) | group, nil
 	}
+}
+
+func atomOfRegister(value interface{}) (byte, error) {
+	if atom, err := asAtom(value); err != nil {
+		return 0, err
+	} else {
+		str := atom.String()
+		if !registers.IsKeyword(str) {
+			return 0, fmt.Errorf("%s is not a register!", str)
+		} else {
+			return registers_StringToByte[str], nil
+		}
+	}
+}
+func immParse(atom lisp.Atom, width int) (uint64, error) {
+	str := atom.String()
+	// parse the immedate value
+	if num, err := strconv.ParseUint(str, 10, width); err == nil {
+		return num, nil
+	} else if num, err := strconv.ParseUint(str, 16, width); err == nil {
+		return num, nil
+	} else if num, err := strconv.ParseUint(str, 2, width); err == nil {
+		return num, nil
+	} else {
+		return 0, fmt.Errorf("Expected an %d bit immediate value in decimal, binary, or hex format. Got %s instead!", width, str)
+	}
+}
+func applyToAtomNumeric(value interface{}, width int) (uint64, error) {
+	if atom, err := asAtom(value); err != nil {
+		return 0, err
+	} else {
+		return immParse(atom, width)
+	}
+}
+func atomOfImm8(value interface{}) (byte, error) {
+	val, err := applyToAtomNumeric(value, 8)
+	return byte(val), err
+}
+func atomOfImm16(value interface{}) (Word, error) {
+	val, err := applyToAtomNumeric(value, 16)
+	return Word(val), err
 }
 
 func init() {
