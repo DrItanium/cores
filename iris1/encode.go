@@ -109,18 +109,6 @@ func asAtom(value interface{}) (lisp.Atom, error) {
 		return nil, fmt.Errorf("Value of type %t is not a lisp.Atom", t)
 	}
 }
-func isSymbol(atom lisp.Atom, value string) bool {
-	return atom.String() == value
-}
-func isDestinationRegister(atom lisp.Atom) bool {
-	return isSymbol(atom, "?dest")
-}
-func isSource0Register(atom lisp.Atom) bool {
-	return isSymbol(atom, "?src0")
-}
-func isSource1Register(atom lisp.Atom) bool {
-	return isSymbol(atom, "?src1")
-}
 
 func parseNumber(atom lisp.Atom, width int) (byte, error) {
 	str := atom.String()
@@ -242,7 +230,14 @@ func (this instructionBuilder) get(name string) (bool, interface{}) {
 	return result, val
 }
 
-type µcodePopulator func(interface{}, instructionBuilder) error
+type µcodePopulator interface {
+	Matches(interface{}, instructionBuilder) error
+}
+type µcodePopulatorFunc func(interface{}, instructionBuilder) error
+
+func (this µcodePopulatorFunc) Matches(l interface{}, bld instructionBuilder) error {
+	return this(l, bld)
+}
 
 func setImm8(l interface{}, bld instructionBuilder, field string) error {
 	if word, err := atomOfImm8(l); err == nil {
@@ -298,15 +293,33 @@ func setRegister(l interface{}, bld instructionBuilder, field string) error {
 	}
 	return nil
 }
+func isSymbol(atom lisp.Atom, value string) bool {
+	return atom.String() == value
+}
+
+func explicitSymbolMatch(symb string) µcodePopulator {
+	return µcodePopulatorFunc(func(l interface{}, bld instructionBuilder) error {
+		if atom, err := asAtom(l); err != nil {
+			return err
+		} else if !isSymbol(atom, symb) {
+			return fmt.Errorf("Expected symbol %s but got %s instead.", symb, atom.String())
+		} else {
+			return nil
+		}
+	})
+}
+
+type µcodeListMatcher struct {
+}
 
 var variableTranslations = map[string]µcodePopulator{
-	"?dest":   func(l interface{}, bld instructionBuilder) error { return setRegister(l, bld, "?dest") },
-	"?src0":   func(l interface{}, bld instructionBuilder) error { return setRegister(l, bld, "?src0") },
-	"?src1":   func(l interface{}, bld instructionBuilder) error { return setRegister(l, bld, "?src1") },
-	"?vector": func(l interface{}, bld instructionBuilder) error { return setImm8(l, bld, "?vector") },
-	"?upper":  func(l interface{}, bld instructionBuilder) error { return setImm8(l, bld, "?upper") },
-	"?lower":  func(l interface{}, bld instructionBuilder) error { return setImm8(l, bld, "?lower") },
-	"?word": func(l interface{}, bld instructionBuilder) error {
+	"?dest":   µcodePopulatorFunc(func(l interface{}, bld instructionBuilder) error { return setRegister(l, bld, "?dest") }),
+	"?src0":   µcodePopulatorFunc(func(l interface{}, bld instructionBuilder) error { return setRegister(l, bld, "?src0") }),
+	"?src1":   µcodePopulatorFunc(func(l interface{}, bld instructionBuilder) error { return setRegister(l, bld, "?src1") }),
+	"?vector": µcodePopulatorFunc(func(l interface{}, bld instructionBuilder) error { return setImm8(l, bld, "?vector") }),
+	"?upper":  µcodePopulatorFunc(func(l interface{}, bld instructionBuilder) error { return setImm8(l, bld, "?upper") }),
+	"?lower":  µcodePopulatorFunc(func(l interface{}, bld instructionBuilder) error { return setImm8(l, bld, "?lower") }),
+	"?word": µcodePopulatorFunc(func(l interface{}, bld instructionBuilder) error {
 		if word, err := atomOfImm16(l); err == nil {
 			if ok, v := bld.get("?word"); ok {
 				switch v.(type) {
@@ -344,7 +357,7 @@ var variableTranslations = map[string]µcodePopulator{
 			}
 		}
 		return nil
-	},
+	}),
 }
 
 func init() {
