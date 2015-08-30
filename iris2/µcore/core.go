@@ -6,8 +6,8 @@ type Word uint64
 type Instruction Word
 type Port chan Word
 type Packet struct {
-	Output []Port
-	Input  []Port
+	Output Port
+	Input  [2]Port
 }
 type Link chan Packet
 
