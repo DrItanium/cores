@@ -154,7 +154,7 @@ func (this Instruction) Op() byte {
 	return byte(((this & 0x000000FF) & 0xF8) >> 3)
 }
 
-func (this Instruction) Register(index int) (byte, error) {
+func (this Instruction) Byte(index int) (byte, error) {
 	switch index {
 	case 0:
 		return byte(this), nil
@@ -169,21 +169,21 @@ func (this Instruction) Register(index int) (byte, error) {
 	}
 }
 func (this Instruction) Source1() byte {
-	if value, err := this.Register(3); err != nil {
+	if value, err := this.Byte(3); err != nil {
 		panic(err) // we should never ever get here!
 	} else {
 		return value
 	}
 }
 func (this Instruction) Source0() byte {
-	if value, err := this.Register(2); err != nil {
+	if value, err := this.Byte(2); err != nil {
 		panic(err) // we should never ever get here!
 	} else {
 		return value
 	}
 }
 func (this Instruction) Destination() byte {
-	if value, err := this.Register(1); err != nil {
+	if value, err := this.Byte(1); err != nil {
 		panic(err) // we should never ever get here!
 	} else {
 		return value
@@ -193,6 +193,46 @@ func (this Instruction) Immediate() Word {
 	return (Word(this.Source1()) << 8) | Word(this.Source0())
 }
 
+func (this *Instruction) SetGroup(group byte) {
+	*this = ((*this &^ 0x7) | Instruction(group))
+}
+func (this *Instruction) SetOp(op byte) {
+	*this = ((*this &^ 0xF8) | (Instruction(op) << 3))
+}
+func (this *Instruction) SetByte(index int, value byte) error {
+	switch index {
+	case 1:
+		*this = ((*this &^ 0x0000FF00) | (Instruction(value) << 8))
+	case 2:
+		*this = ((*this &^ 0x00FF0000) | (Instruction(value) << 16))
+	case 3:
+		*this = ((*this &^ 0xFF000000) | (Instruction(value) << 24))
+	default:
+		return fmt.Errorf("Provided index %d is out of range!", index)
+	}
+	return nil
+}
+
+func (this *Instruction) SetDestination(value byte) {
+	this.SetByte(1, value)
+}
+func (this *Instruction) SetSource0(value byte) {
+	this.SetByte(2, value)
+}
+func (this *Instruction) SetSource1(value byte) {
+	this.SetByte(3, value)
+}
+
+func NewInstruction(group, op, dest, src0, src1 byte) *Instruction {
+	var i Instruction
+	i.SetOp(op)
+	i.SetGroup(group)
+	i.SetDestination(dest)
+	i.SetSource0(src0)
+	i.SetSource1(src1)
+	return &i
+}
+
 type Core struct {
 	Gpr                           [RegisterCount]Word
 	Code                          [MemorySize]Instruction
@@ -200,7 +240,7 @@ type Core struct {
 	Pc                            Word
 	AdvancePc, TerminateExecution bool
 }
-type executionUnit func(*Core, Instruction) error
+type executionUnit func(*Core, *Instruction) error
 
 var dispatchTable = map[byte]executionUnit{
 	GroupArithmetic: (*Core).arithmetic,
@@ -210,7 +250,7 @@ var dispatchTable = map[byte]executionUnit{
 	//GroupMisc:       misc,
 }
 
-func (this *Core) Dispatch(value Instruction) error {
+func (this *Core) Dispatch(value *Instruction) error {
 	if fn, ok := dispatchTable[value.Group()]; !ok {
 		return fmt.Errorf("Instruction group %d isn't used!", value.Group())
 	} else {
@@ -259,7 +299,7 @@ func shiftright(a, b Word) (Word, error) {
 type arithmeticUnit func(Word, Word) (Word, error)
 
 func reg_reg_ArithOp(fn arithmeticUnit) executionUnit {
-	return func(c *Core, inst Instruction) error {
+	return func(c *Core, inst *Instruction) error {
 		if out, err := fn(c.Gpr[inst.Source0()], c.Gpr[inst.Source1()]); err != nil {
 			return err
 		} else {
@@ -269,7 +309,7 @@ func reg_reg_ArithOp(fn arithmeticUnit) executionUnit {
 	}
 }
 func reg_imm_ArithOp(fn arithmeticUnit) executionUnit {
-	return func(c *Core, inst Instruction) error {
+	return func(c *Core, inst *Instruction) error {
 		if out, err := fn(c.Gpr[inst.Source0()], Word(inst.Source1())); err != nil {
 			return err
 		} else {
@@ -300,7 +340,7 @@ var arithmeticDispatch = map[byte]executionUnit{
 	ArithmeticOpShiftRightImmediate: reg_imm_ArithOp(shiftright),
 }
 
-func (this *Core) arithmetic(value Instruction) error {
+func (this *Core) arithmetic(value *Instruction) error {
 	if op, ok := arithmeticDispatch[value.Op()]; !ok {
 		return fmt.Errorf("Illegal arithmetic operation %d", value.Op())
 	} else {
