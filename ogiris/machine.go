@@ -244,9 +244,9 @@ type executionUnit func(*Core, *Instruction) error
 
 var dispatchTable = map[byte]executionUnit{
 	GroupArithmetic: (*Core).arithmetic,
+	GroupMove:       (*Core).move,
 	//GroupJump:       jump,
 	//GroupCompare:    compare,
-	//GroupMove:       move,
 	//GroupMisc:       misc,
 }
 
@@ -258,6 +258,8 @@ func (this *Core) Dispatch(value *Instruction) error {
 		return fn(this, value)
 	}
 }
+
+// arithmetic operations
 func legalDenominator(denominator Word) error {
 	if denominator == 0 {
 		return fmt.Errorf("denominator is zero!")
@@ -343,6 +345,152 @@ var arithmeticDispatch = map[byte]executionUnit{
 func (this *Core) arithmetic(value *Instruction) error {
 	if op, ok := arithmeticDispatch[value.Op()]; !ok {
 		return fmt.Errorf("Illegal arithmetic operation %d", value.Op())
+	} else {
+		return op(this, value)
+	}
+}
+
+// move operations
+type swapOpGet func(*Core, byte) Word
+type swapOpSet func(*Core, byte, Word)
+
+func (this *Core) registerValue(index byte) Word {
+	return this.Gpr[index]
+}
+func (this *Core) registerAddress(index byte) Word {
+	return this.Data[this.Gpr[index]]
+}
+func (this *Core) setRegisterValue(index byte, value Word) {
+	this.Gpr[index] = value
+}
+func (this *Core) setRegisterAddress(index byte, value Word) {
+	this.Data[this.Gpr[index]] = value
+}
+func (this *Core) setImmediateAddress(imm, value Word) {
+	this.Data[imm] = value
+}
+
+func (this *Core) moveop_move(value *Instruction) error {
+	this.Gpr[value.Destination()] = this.Gpr[value.Source0()]
+	return nil
+}
+func (this *Core) moveop_set(value *Instruction) error {
+	this.Gpr[value.Destination()] = value.Immediate()
+	return nil
+}
+func (this *Core) moveop_swap_base(value *Instruction, destGet, src0Get swapOpGet, destSet, src0Set swapOpSet) error {
+	dest := value.Destination()
+	src0 := value.Source0()
+	dVal := destGet(this, dest)
+	sVal := src0Get(this, src0)
+	destSet(this, dest, sVal)
+	src0Set(this, src0, dVal)
+	return nil
+}
+func (this *Core) moveop_swap(value *Instruction) error {
+	return this.moveop_swap_base(value, (*Core).registerValue, (*Core).registerValue, (*Core).setRegisterValue, (*Core).setRegisterValue)
+}
+func (this *Core) moveop_swap_reg_addr(value *Instruction) error {
+	return this.moveop_swap_base(value, (*Core).registerValue, (*Core).registerAddress, (*Core).setRegisterValue, (*Core).setRegisterAddress)
+}
+func (this *Core) moveop_swap_addr_addr(value *Instruction) error {
+	return this.moveop_swap_base(value, (*Core).registerAddress, (*Core).registerAddress, (*Core).setRegisterAddress, (*Core).setRegisterAddress)
+}
+
+func (this *Core) moveop_swap_reg_mem(value *Instruction) error {
+	dest := value.Destination()
+	imm := value.Immediate()
+	dVal := this.registerValue(dest)
+	aVal := this.Data[imm]
+	this.setRegisterValue(dest, aVal)
+	this.setImmediateAddress(imm, dVal)
+	return nil
+}
+func (this *Core) moveop_swap_addr_mem(value *Instruction) error {
+	dest := value.Destination()
+	imm := value.Immediate()
+	dVal := this.registerAddress(dest)
+	aVal := this.Data[imm]
+	this.setRegisterAddress(dest, aVal)
+	this.setImmediateAddress(imm, dVal)
+	return nil
+}
+func (this *Core) moveop_load_base(dest byte, value Word) error {
+	this.setRegisterValue(dest, value)
+	return nil
+}
+func (this *Core) moveop_load(value *Instruction) error {
+	return this.moveop_load_base(value.Destination(), this.registerAddress(value.Source0()))
+}
+func (this *Core) moveop_load_mem(value *Instruction) error {
+	return this.moveop_load_base(value.Destination(), this.Data[value.Immediate()])
+}
+func (this *Core) moveop_store_base(dest byte, value Word) error {
+	this.setRegisterAddress(dest, value)
+	return nil
+}
+func (this *Core) moveop_store(value *Instruction) error {
+	return this.moveop_store_base(value.Destination(), this.registerValue(value.Source0()))
+}
+func (this *Core) moveop_store_imm(value *Instruction) error {
+	return this.moveop_store_base(value.Destination(), value.Immediate())
+}
+func (this *Core) moveop_store_mem(value *Instruction) error {
+	return this.moveop_store_base(value.Destination(), this.Data[value.Immediate()])
+}
+func (this *Core) moveop_store_addr(value *Instruction) error {
+	return this.moveop_store_base(value.Destination(), this.registerAddress(value.Source0()))
+}
+func (this *Core) PushOntoStack(value Word) {
+	index := this.Gpr[StackPointerRegisterIndex]
+	index++
+	this.Stack[index] = value
+	this.Gpr[StackPointerRegisterIndex] = index
+}
+func (this *Core) PopOffStack() Word {
+	index := this.Gpr[StackPointerRegisterIndex]
+	value := this.Stack[index]
+	index--
+	this.Gpr[StackPointerRegisterIndex] = index
+	return value
+}
+func (this *Core) moveop_push(value *Instruction) error {
+	this.PushOntoStack(this.registerValue(value.Destination()))
+	return nil
+}
+func (this *Core) moveop_push_imm(value *Instruction) error {
+	this.PushOntoStack(value.Immediate())
+	return nil
+}
+func (this *Core) moveop_pop(value *Instruction) error {
+	this.setRegisterValue(value.Destination(), this.PopOffStack())
+	return nil
+}
+
+// move operations
+var moveDispatch = map[byte]executionUnit{
+	MoveOpMove:         (*Core).moveop_move,           // move r? r?
+	MoveOpSwap:         (*Core).moveop_swap,           // swap r? r?
+	MoveOpSwapRegAddr:  (*Core).moveop_swap_reg_addr,  // swap.reg.addr r? r?
+	MoveOpSwapAddrAddr: (*Core).moveop_swap_addr_addr, // swap.addr.addr r? r?
+	MoveOpSwapRegMem:   (*Core).moveop_swap_reg_mem,   // swap.reg.mem r? $imm
+	MoveOpSwapAddrMem:  (*Core).moveop_swap_addr_mem,  // swap.addr.mem r? $imm
+	MoveOpSet:          (*Core).moveop_set,            // set r? $imm
+	MoveOpLoad:         (*Core).moveop_load,           // load r? r?
+	MoveOpLoadMem:      (*Core).moveop_load_mem,       // load.mem r? $imm
+	MoveOpStore:        (*Core).moveop_store,          // store r? r?
+	MoveOpStoreAddr:    (*Core).moveop_store_addr,     // store.addr r? r?
+	MoveOpStoreMem:     (*Core).moveop_store_mem,      // memcopy r? $imm
+	MoveOpStoreImm:     (*Core).moveop_store_imm,      // memset r? $imm
+	// uses an indirect register for the stack pointer
+	MoveOpPush:          (*Core).moveop_push,     // push r?
+	MoveOpPushImmediate: (*Core).moveop_push_imm, // push.imm $imm
+	MoveOpPop:           (*Core).moveop_pop,      // pop r?
+}
+
+func (this *Core) move(value *Instruction) error {
+	if op, ok := moveDispatch[value.Op()]; !ok {
+		return fmt.Errorf("Illegal move operation %d", value.Op())
 	} else {
 		return op(this, value)
 	}
