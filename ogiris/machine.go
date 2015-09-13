@@ -25,7 +25,7 @@ var registeredGroups = []struct {
 	{Name: "arithmetic operations", Count: ArithmeticOpCount, Max: MinorOperationMax},
 	{Name: "move operations", Count: MoveOpCount, Max: MinorOperationMax},
 	{Name: "jump operations", Count: JumpOpCount, Max: MinorOperationMax},
-	{Name: "compare operations", Count: CompareOpCount, Max: MinorOperationMax},
+	{Name: "compare operations", Count: CompareOpCount, Max: 8},
 	{Name: "misc operations", Count: MiscOpCount, Max: MinorOperationMax},
 }
 
@@ -106,29 +106,11 @@ const (
 
 const (
 	CompareOpEq = iota
-	CompareOpEqAnd
-	CompareOpEqOr
-	CompareOpEqXor
 	CompareOpNeq
-	CompareOpNeqAnd
-	CompareOpNeqOr
-	CompareOpNeqXor
 	CompareOpLessThan
-	CompareOpLessThanAnd
-	CompareOpLessThanOr
-	CompareOpLessThanXor
 	CompareOpGreaterThan
-	CompareOpGreaterThanAnd
-	CompareOpGreaterThanOr
-	CompareOpGreaterThanXor
 	CompareOpLessThanOrEqualTo
-	CompareOpLessThanOrEqualToAnd
-	CompareOpLessThanOrEqualToOr
-	CompareOpLessThanOrEqualToXor
 	CompareOpGreaterThanOrEqualTo
-	CompareOpGreaterThanOrEqualToAnd
-	CompareOpGreaterThanOrEqualToOr
-	CompareOpGreaterThanOrEqualToXor
 	CompareOpCount
 )
 
@@ -245,8 +227,8 @@ type executionUnit func(*Core, *Instruction) error
 var dispatchTable = map[byte]executionUnit{
 	GroupArithmetic: (*Core).arithmetic,
 	GroupMove:       (*Core).move,
+	GroupCompare:    (*Core).compare,
 	//GroupJump:       jump,
-	//GroupCompare:    compare,
 	//GroupMisc:       misc,
 }
 
@@ -494,4 +476,73 @@ func (this *Core) move(value *Instruction) error {
 	} else {
 		return op(this, value)
 	}
+}
+
+// compare operations
+// modify the encoding slightly for our purposes
+type compareBody func(Word, Word) bool
+type combineBody func(Word, Word) Word
+
+func (this *Core) composeRegisterAndSet(index byte, value Word, fn combineBody) {
+	this.setRegisterValue(index, fn(this.registerValue(index), value))
+}
+func (this *Core) setRegisterAndEquals(index byte, value Word) {
+	this.composeRegisterAndSet(index, value, func(a, b Word) Word { return a & b })
+}
+func (this *Core) setRegisterOrEquals(index byte, value Word) {
+	this.composeRegisterAndSet(index, value, func(a, b Word) Word { return a | b })
+}
+func (this *Core) setRegisterXorEquals(index byte, value Word) {
+	this.composeRegisterAndSet(index, value, func(a, b Word) Word { return a ^ b })
+}
+func (this *Core) setRegisterAssign(index byte, value Word) {
+	this.composeRegisterAndSet(index, value, func(_, b Word) Word { return b })
+}
+
+func boolToWord(val bool) Word {
+	if val {
+		return 1
+	} else {
+		return 0
+	}
+}
+
+func (this *Core) compareop_base(value *Instruction, compare compareBody, combine combineBody) error {
+	dest, src0, src1 := value.Destination(), value.Source0(), value.Source1()
+	dVal, s0Val, s1Val := this.registerValue(dest), this.registerValue(src0), this.registerValue(src1)
+	this.setRegisterValue(dest, combine(dVal, boolToWord(compare(s0Val, s1Val))))
+	return nil
+}
+
+var compareTable = map[byte]compareBody{
+	CompareOpEq:                   func(a, b Word) bool { return a == b },
+	CompareOpLessThanOrEqualTo:    func(a, b Word) bool { return a <= b },
+	CompareOpGreaterThanOrEqualTo: func(a, b Word) bool { return a >= b },
+	CompareOpNeq:                  func(a, b Word) bool { return a != b },
+	CompareOpLessThan:             func(a, b Word) bool { return a < b },
+	CompareOpGreaterThan:          func(a, b Word) bool { return a > b },
+}
+var combineTable = []combineBody{
+	func(_, _new Word) Word { return _new },
+	func(old, _new Word) Word { return old & _new },
+	func(old, _new Word) Word { return old | _new },
+	func(old, _new Word) Word { return old ^ _new },
+}
+
+func (this *Core) compare(value *Instruction) error {
+	// unlike the other instruction formats the op field is broken up into two parts,
+	// the lower three bits represent the compare operations
+	// the upper two bits represent the combine operation with the following layout:
+	// 0 - = (do no composition)
+	// 1 - &= (and with the current result)
+	// 2 - |= (or with the current result)
+	// 3 - ^= (xor with the current result)
+	bundle := value.Op()
+	op := bundle & 0x7
+	if f, ok := compareTable[op]; !ok {
+		return fmt.Errorf("Illegal compare type %d", op)
+	} else {
+		return this.compareop_base(value, f, combineTable[int(bundle>>3)])
+	}
+
 }
