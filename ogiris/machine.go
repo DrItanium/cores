@@ -13,7 +13,7 @@ const (
 	MemorySize                = 65536
 	MajorOperationMax         = 8
 	MinorOperationMax         = 32
-	PredicateRegisterIndex    = 255
+	LinkRegisterIndex         = 255
 	StackPointerRegisterIndex = 254
 )
 
@@ -24,7 +24,6 @@ var registeredGroups = []struct {
 	{Name: "instruction groups", Count: GroupCount, Max: MajorOperationMax},
 	{Name: "arithmetic operations", Count: ArithmeticOpCount, Max: MinorOperationMax},
 	{Name: "move operations", Count: MoveOpCount, Max: MinorOperationMax},
-	{Name: "jump operations", Count: JumpOpCount, Max: MinorOperationMax},
 	{Name: "compare operations", Count: CompareOpCount, Max: 8},
 	{Name: "misc operations", Count: MiscOpCount, Max: MinorOperationMax},
 }
@@ -82,26 +81,6 @@ const (
 	MoveOpPushImmediate // push.imm $imm
 	MoveOpPop           // pop r?
 	MoveOpCount
-)
-
-const (
-	JumpOpUnconditionalImmediate = iota
-	JumpOpUnconditionalImmediateLink
-	JumpOpUnconditionalRegister
-	JumpOpUnconditionalRegisterLink
-	JumpOpConditionalTrueImmediate
-	JumpOpConditionalTrueImmediateLink
-	JumpOpConditionalTrueRegister
-	JumpOpConditionalTrueRegisterLink
-	JumpOpConditionalFalseImmediate
-	JumpOpConditionalFalseImmediateLink
-	JumpOpConditionalFalseRegister
-	JumpOpConditionalFalseRegisterLink
-	JumpOpIfThenElseNormalPredTrue
-	JumpOpIfThenElseNormalPredFalse
-	JumpOpIfThenElseLinkPredTrue
-	JumpOpIfThenElseLinkPredFalse
-	JumpOpCount
 )
 
 const (
@@ -483,22 +462,6 @@ func (this *Core) move(value *Instruction) error {
 type compareBody func(Word, Word) bool
 type combineBody func(Word, Word) Word
 
-func (this *Core) composeRegisterAndSet(index byte, value Word, fn combineBody) {
-	this.setRegisterValue(index, fn(this.registerValue(index), value))
-}
-func (this *Core) setRegisterAndEquals(index byte, value Word) {
-	this.composeRegisterAndSet(index, value, func(a, b Word) Word { return a & b })
-}
-func (this *Core) setRegisterOrEquals(index byte, value Word) {
-	this.composeRegisterAndSet(index, value, func(a, b Word) Word { return a | b })
-}
-func (this *Core) setRegisterXorEquals(index byte, value Word) {
-	this.composeRegisterAndSet(index, value, func(a, b Word) Word { return a ^ b })
-}
-func (this *Core) setRegisterAssign(index byte, value Word) {
-	this.composeRegisterAndSet(index, value, func(_, b Word) Word { return b })
-}
-
 func boolToWord(val bool) Word {
 	if val {
 		return 1
@@ -544,5 +507,96 @@ func (this *Core) compare(value *Instruction) error {
 	} else {
 		return this.compareop_base(value, f, combineTable[int(bundle>>3)])
 	}
+}
 
+// jump operations
+func (this *Core) NextInstruction() Word {
+	return this.Pc + 1
+}
+
+func (this *Core) jumpop_select_next_instruction(cond bool, onTrue, onFalse Word) {
+	// set the Pc depending on the result of cond
+	if cond {
+		this.Pc = onTrue
+	} else {
+		this.Pc = onFalse
+	}
+}
+func (this *Core) jumpop_select_next_instruction_true(value, onTrue, onFalse Word) {
+	this.jumpop_select_next_instruction(value != 0, onTrue, onFalse)
+}
+func (this *Core) jumpop_select_next_instruction_false(value, onTrue, onFalse Word) {
+	this.jumpop_select_next_instruction(value == 0, onTrue, onFalse)
+}
+
+func (this *Core) jumpop_jump_if_true(value, addr Word) {
+	this.jumpop_select_next_instruction_true(value, addr, this.NextInstruction())
+}
+func (this *Core) jumpop_jump_if_false(value, addr Word) {
+	this.jumpop_select_next_instruction_false(value, addr, this.NextInstruction())
+}
+
+func (this *Core) jumpop_setpc(address Word) {
+	this.Pc = address
+}
+
+func (this *Core) jumpop_set_link_register() {
+	this.setRegisterValue(LinkRegisterIndex, this.NextInstruction())
+}
+func (this Word) boolean() bool {
+	return this != 0
+}
+func (this Instruction) unpack_jump() (selectForm, link, conditional, useFalse, register bool) {
+	// modify the encoding of the op field to be horizontal
+	// From lowest to highest
+	// 0 - Select?
+	// 1 - Link?
+	// 2 - Conditional?
+	// 3 - Check For False?
+	// 4 - Register?
+	op := this.Op()
+	selectForm = (op & 0x1) != 0
+	link = ((op >> 1) & 0x1) != 0
+	conditional = ((op >> 2) & 0x1) != 0
+	useFalse = ((op >> 3) & 0x1) != 0
+	register = ((op >> 4) & 0x1) != 0
+	return
+}
+func (this *Core) jump(value *Instruction) error {
+	selectForm, link, conditional, useFalse, register := value.unpack_jump()
+	// save the link register first
+	registerOrImmediate := func(index byte) Word {
+		if register {
+			return this.registerValue(index)
+		} else {
+			return value.Immediate()
+		}
+	}
+	if link {
+		this.jumpop_set_link_register()
+	}
+	if selectForm {
+		// this is the if then else form so it is pretty simple
+		pred, onTrue, onFalse := value.Destination(), value.Source0(), value.Source1()
+		var ifthenelse func(*Core, Word, Word, Word)
+		if useFalse {
+			ifthenelse = (*Core).jumpop_select_next_instruction_false
+		} else {
+			ifthenelse = (*Core).jumpop_select_next_instruction_true
+		}
+		ifthenelse(this, this.registerValue(pred), this.registerValue(onTrue), this.registerValue(onFalse))
+	} else if conditional {
+		// it is something like branch if true/false
+		var ifthen func(*Core, Word, Word)
+		if useFalse {
+			ifthen = (*Core).jumpop_jump_if_false
+		} else {
+			ifthen = (*Core).jumpop_jump_if_true
+		}
+		ifthen(this, this.registerValue(value.Destination()), registerOrImmediate(value.Source0()))
+	} else {
+		// unconditional jump
+		this.jumpop_setpc(registerOrImmediate(value.Destination()))
+	}
+	return nil
 }
