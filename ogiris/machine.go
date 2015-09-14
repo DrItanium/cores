@@ -25,7 +25,7 @@ var registeredGroups = []struct {
 	{Name: "arithmetic operations", Count: ArithmeticOpCount, Max: MinorOperationMax},
 	{Name: "move operations", Count: MoveOpCount, Max: MinorOperationMax},
 	{Name: "compare operations", Count: CompareOpCount, Max: 8},
-	{Name: "misc operations", Count: MiscOpCount, Max: MinorOperationMax},
+	{Name: "misc operations", Count: MiscOpCount, Max: 17},
 }
 
 // instruction groups
@@ -200,6 +200,7 @@ type Core struct {
 	Data, Stack                   [MemorySize]Word
 	Pc                            Word
 	AdvancePc, TerminateExecution bool
+	systemCommands                [256]executionUnit
 }
 type executionUnit func(*Core, *Instruction) error
 
@@ -207,16 +208,16 @@ var dispatchTable = map[byte]executionUnit{
 	GroupArithmetic: (*Core).arithmetic,
 	GroupMove:       (*Core).move,
 	GroupCompare:    (*Core).compare,
-	//GroupJump:       jump,
+	GroupJump:       (*Core).jump,
 	//GroupMisc:       misc,
 }
 
 func (this *Core) Dispatch(value *Instruction) error {
-	if fn, ok := dispatchTable[value.Group()]; !ok {
-		return fmt.Errorf("Instruction group %d isn't used!", value.Group())
-	} else {
+	if fn, ok := dispatchTable[value.Group()]; ok {
 		this.AdvancePc = true
 		return fn(this, value)
+	} else {
+		return fmt.Errorf("Instruction group %d isn't used!", value.Group())
 	}
 }
 
@@ -599,4 +600,16 @@ func (this *Core) jump(value *Instruction) error {
 		this.jumpop_setpc(registerOrImmediate(value.Destination()))
 	}
 	return nil
+}
+
+// misc operations
+
+func (this *Core) misc(value *Instruction) error {
+	// we have a slight change in encoding, if the first bit is one then we are in system mode which changes how we read the encoding
+	// encoding of the i
+	if (value.Op() & 0x1) != 0 {
+		return nil
+	} else {
+		return fmt.Errorf("Unimplemented misc op %d", value.Op())
+	}
 }
