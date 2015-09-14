@@ -209,7 +209,7 @@ var dispatchTable = map[byte]executionUnit{
 	GroupMove:       (*Core).move,
 	GroupCompare:    (*Core).compare,
 	GroupJump:       (*Core).jump,
-	//GroupMisc:       misc,
+	GroupMisc:       (*Core).misc,
 }
 
 func (this *Core) Dispatch(value *Instruction) error {
