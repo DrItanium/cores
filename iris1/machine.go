@@ -2,8 +2,31 @@
 package iris1
 
 import (
+	"encoding/binary"
 	"fmt"
+	"github.com/DrItanium/edgeworth"
 )
+
+func RegistrationName() string {
+	return "iris1"
+}
+
+// Dummy function to force inclusion
+func Register() {}
+
+type Registrar func(...interface{}) (edgeworth.Machine, error)
+
+func (this Registrar) New(args ...interface{}) (edgeworth.Machine, error) {
+	return this(args)
+}
+
+func generateCore(a ...interface{}) (edgeworth.Machine, error) {
+	return New()
+}
+
+func init() {
+	edgeworth.RegisterMachine(RegistrationName(), Registrar(generateCore))
+}
 
 const (
 	RegisterCount            = 256
@@ -445,4 +468,95 @@ func (this *Core) AdvanceProgramCounter() error {
 
 func (this *Core) ExecuteCurrentInstruction() error {
 	return this.Dispatch(this.CurrentInstruction())
+}
+
+func (this *Core) Run() error {
+	for !this.TerminateExecution() {
+		if err := this.ExecuteCurrentInstruction(); err != nil {
+			return fmt.Errorf("ERROR during execution: %s\n", err)
+		} else if err := this.AdvanceProgramCounter(); err != nil {
+			return fmt.Errorf("ERROR during the advancement of the program counter: %s", err)
+		}
+	}
+	return nil
+}
+
+func (this *Core) GetDebugStatus() bool {
+	return false
+}
+
+func (this *Core) SetDebug(_ bool) {
+
+}
+
+const (
+	sixteenBitMemory      = 65536
+	instructionMemorySize = sixteenBitMemory * 4
+	dataMemorySize        = sixteenBitMemory * 2
+)
+
+func readWord(input <-chan byte) (Word, error) {
+	if value, more := <-input; !more {
+		return 0, fmt.Errorf("Closed stream")
+	} else if value1, more0 := <-input; !more0 {
+		return 0, fmt.Errorf("Closed stream")
+	} else {
+		return Word(binary.LittleEndian.Uint16([]byte{value, value1})), nil
+	}
+}
+func readInstruction(input <-chan byte) (Instruction, error) {
+	if value, more := <-input; !more {
+		// closed early it seems :(
+		return 0, fmt.Errorf("Closed stream")
+	} else if value2, more0 := <-input; !more0 {
+		return 0, fmt.Errorf("Closed stream")
+	} else if value3, more1 := <-input; !more1 {
+		return 0, fmt.Errorf("Closed stream")
+	} else if value4, more2 := <-input; !more2 {
+		return 0, fmt.Errorf("Closed stream")
+	} else {
+		return Instruction(binary.LittleEndian.Uint32([]byte{value, value2, value3, value4})), nil
+	}
+
+}
+func (this *Core) InstallProgram(input <-chan byte) error {
+	for i := 0; i < instructionMemorySize; i++ {
+		if inst, err := readInstruction(input); err != nil {
+			return err
+		} else {
+			this.code[i] = inst
+		}
+	}
+	for i := 0; i < dataMemorySize; i++ {
+		if inst, err := readWord(input); err != nil {
+			return err
+		} else {
+			this.data[i] = inst
+		}
+	}
+	return nil
+}
+
+func (this *Core) Dump(output chan<- byte) error {
+	inst, word := make([]byte, 4), make([]byte, 2)
+	for i := 0; i < instructionMemorySize; i++ {
+		binary.LittleEndian.PutUint32(inst, uint32(this.code[i]))
+		for _, v := range inst {
+			output <- v
+		}
+	}
+	for i := 0; i < dataMemorySize; i++ {
+		binary.LittleEndian.PutUint16(word, uint16(this.data[i]))
+		for _, v := range word {
+			output <- v
+		}
+	}
+	return nil
+}
+
+func (this *Core) Startup() error {
+	return nil
+}
+func (this *Core) Shutdown() error {
+	return nil
 }
