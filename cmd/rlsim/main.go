@@ -10,20 +10,37 @@ import (
 	"os"
 )
 
+var target = flag.String("target", "", "Target machine to simulate")
+var listTargets = flag.Bool("list-targets", false, "List supported machines and exit")
+
 func init() {
 	// this does nothing but prevent compilation errors
 	registration.Register()
 }
+func listRegisteredTargets() {
+	fmt.Println("Supported targets: ")
+	for _, val := range edgeworth.RegisteredMachines() {
+		fmt.Println("\t - ", val)
+	}
+}
 func main() {
 	flag.Parse()
+	if *listTargets {
+		listRegisteredTargets()
+		return
+	}
+	if *target == "" {
+		fmt.Println("No target specified")
+		return
+	} else if !edgeworth.MachineExists(*target) {
+		fmt.Printf("Specified target %s is not a supported target!\n", *target)
+		listRegisteredTargets()
+		return
+	}
 	if len(flag.Args()) != 1 {
 		flag.Usage()
 		fmt.Println("Only one input file accepted!")
-		fmt.Println("Supported targets: ")
-		for _, val := range edgeworth.RegisteredMachines() {
-			fmt.Println("\t - ", val)
-		}
-	} else if mach, err0 := edgeworth.NewMachine(flag.Args()[0]); err0 != nil {
+	} else if mach, err0 := edgeworth.NewMachine(*target); err0 != nil {
 		fmt.Println(err0)
 	} else {
 		// install the program
@@ -31,22 +48,27 @@ func main() {
 		done2 := make(chan error)
 		data := make(chan byte)
 
-		loadMemoryImage(flag.Args()[1], done, data)
+		loadMemoryImage(flag.Args()[0], done, data)
 		go func(mach edgeworth.Machine, err chan error, data chan byte) {
 			err <- mach.InstallProgram(data)
 		}(mach, done2, data)
-		if err, err2 := <-done, <-done2; err != nil || err2 != nil {
-			if err != nil {
-				fmt.Printf("ERROR during memory image load (tool side): %s\n", err)
+		for i := 0; i < 2; i++ {
+			select {
+			case err := <-done:
+				if err != nil {
+					fmt.Printf("Error from rlasm: %s\n", err)
+					return
+				}
+			case err := <-done2:
+				if err != nil {
+					fmt.Printf("Error from %s machine: %s\n", *target, err)
+					return
+				}
 			}
-			if err2 != nil {
-				fmt.Printf("ERROR during memory image load (machine side): %s\n", err2)
-			}
-		} else {
-			if err := mach.Run(); err != nil {
-				fmt.Printf("Something wen't wrong during machine execution: %s!", err)
-				//TODO: dump image contents
-			}
+		}
+		if err := mach.Run(); err != nil {
+			fmt.Printf("Something went wrong during machine execution: %s!", err)
+			//TODO: dump image contents
 		}
 	}
 }
