@@ -31,6 +31,8 @@ func main() {
 	}
 	if *target == "" {
 		fmt.Println("No target specified")
+		flag.Usage()
+		listRegisteredTargets()
 		return
 	} else if !edgeworth.MachineExists(*target) {
 		fmt.Printf("Specified target %s is not a supported target!\n", *target)
