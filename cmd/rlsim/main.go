@@ -6,10 +6,15 @@ import (
 	"flag"
 	"fmt"
 	"github.com/DrItanium/cores/iris1"
+	"github.com/DrItanium/registration"
 	"io"
 	"os"
 )
 
+func init() {
+	// this does nothing but prevent compilation errors
+	registration.Register()
+}
 func main() {
 	flag.Parse()
 	if len(flag.Args()) != 1 {
