@@ -18,6 +18,7 @@ type Registration interface {
 type Parser interface {
 	cores.Dumper
 	Parse(lines <-chan Entry) error
+	Process() error
 }
 
 func Register(name string, reg Registration) error {

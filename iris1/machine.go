@@ -14,9 +14,9 @@ func RegistrationName() string {
 // Dummy function to force inclusion
 func Register() {}
 
-type Registrar func(...interface{}) (machine.Machine, error)
+type MachineRegistrar func(...interface{}) (machine.Machine, error)
 
-func (this Registrar) New(args ...interface{}) (machine.Machine, error) {
+func (this MachineRegistrar) New(args ...interface{}) (machine.Machine, error) {
 	return this(args)
 }
 
@@ -25,7 +25,7 @@ func generateCore(a ...interface{}) (machine.Machine, error) {
 }
 
 func init() {
-	machine.Register(RegistrationName(), Registrar(generateCore))
+	machine.Register(RegistrationName(), MachineRegistrar(generateCore))
 }
 
 const (
