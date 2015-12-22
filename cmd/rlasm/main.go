@@ -14,21 +14,32 @@ import (
 var target = flag.String("target", "", "target backend (required)")
 var input = flag.String("input", "", "input file to be processed (leave blank for stdin)")
 var output = flag.String("output", "", "output file (leave blank for stdout")
+var listTargets = flag.Bool("list-targets", false, "display registered targets and exit")
 
 func init() {
 	registration.Register()
 }
 
+func listRegisteredTargets() {
+	fmt.Println("Supported targets: ")
+	for _, val := range parser.GetRegistered() {
+		fmt.Println("\t - ", val)
+	}
+}
 func main() {
 	flag.Parse()
+	if *listTargets {
+		listRegisteredTargets()
+		return
+	}
 	if *target == "" {
 		fmt.Println("Did not specify target backend")
 		flag.Usage()
-		return
+		listRegisteredTargets()
 	} else if !parser.IsRegistered(*target) {
 		fmt.Println("%s is not a registered target backend!", *target)
 		flag.Usage()
-		return
+		listRegisteredTargets()
 	} else {
 		var scanner *bufio.Scanner
 		var o *os.File

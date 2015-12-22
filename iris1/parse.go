@@ -1,7 +1,7 @@
 package iris1
 
 import (
-	//"encoding/binary"
+	"encoding/binary"
 	"fmt"
 	"github.com/DrItanium/cores/registration/parser"
 	"strconv"
@@ -53,9 +53,23 @@ type _parser struct {
 }
 
 func (this *_parser) Dump(pipe chan<- byte) error {
+	c, d := make([]byte, 4), make([]byte, 2)
+	for _, val := range this.core.code {
+		binary.LittleEndian.PutUint32(c, uint32(val))
+		for _, b := range c {
+			pipe <- b
+		}
+	}
+	for _, val := range this.core.data {
+		binary.LittleEndian.PutUint16(d, uint16(val))
+		for _, b := range d {
+			pipe <- b
+		}
+	}
 	return nil
 }
 func (this *_parser) Process() error {
+	// we'll probably want to process labels at this point
 	return nil
 }
 
@@ -74,16 +88,16 @@ func (this *_parser) Parse(lines <-chan parser.Entry) error {
 type nodeType int
 
 const (
-	TypeUnknown nodeType = iota
-	TypeEquals
-	TypeComma
-	TypeLabel
-	TypeRegister
-	TypeImmediate
-	TypeBinaryImmediate
-	TypeHexImmediate
-	TypeComment
-	TypeSymbol
+	typeUnknown nodeType = iota
+	typeEquals
+	typeComma
+	typeLabel
+	typeRegister
+	typeImmediate
+	typeBinaryImmediate
+	typeHexImmediate
+	typeComment
+	typeSymbol
 )
 
 type node struct {
@@ -108,15 +122,15 @@ func parseRegisterValue(str string) (byte, error) {
 	return byte(val), err
 }
 
-type InvalidRegisterError struct {
+type invalidRegisterError struct {
 	Value string
 }
 
-func (this *InvalidRegisterError) Error() string {
+func (this *invalidRegisterError) Error() string {
 	return fmt.Sprintf("Register %s is not a valid register!", this.Value)
 }
 func InvalidRegister(value string) error {
-	return &InvalidRegisterError{Value: value}
+	return &invalidRegisterError{Value: value}
 }
 func (this *node) parseLabel(val string) error {
 	nVal := strings.TrimSuffix(val, ":")
@@ -124,10 +138,10 @@ func (this *node) parseLabel(val string) error {
 	if !unicode.IsLetter(q) {
 		return fmt.Errorf("Label %s starts with a non letter %s!", nVal, q)
 	} else {
-		this.Type = TypeLabel
+		this.Type = typeLabel
 		this.Value = nVal
 		// now parse the label as a entirely new node and see if we get a register back
-		nod := node{Value: this.Value, Type: TypeUnknown}
+		nod := node{Value: this.Value, Type: typeUnknown}
 		if err := nod.Parse(); err != nil {
 			switch err.(type) {
 			case *strconv.NumError:
@@ -140,8 +154,8 @@ func (this *node) parseLabel(val string) error {
 				} else {
 					return err
 				}
-			case *InvalidRegisterError:
-				j := err.(*InvalidRegisterError)
+			case *invalidRegisterError:
+				j := err.(*invalidRegisterError)
 				return fmt.Errorf("Label %s is interpreted as an out of range register! This is not allowed as it is ambiguous!", j.Value)
 			default:
 				return fmt.Errorf("Unkown error occurred: %s! Programmer failure!", err)
@@ -152,7 +166,7 @@ func (this *node) parseLabel(val string) error {
 	}
 }
 func (this *node) parseHexImmediate(val string) error {
-	this.Type = TypeHexImmediate
+	this.Type = typeHexImmediate
 	if v, err := parseHexImmediate(val[2:]); err != nil {
 		return err
 	} else {
@@ -161,7 +175,7 @@ func (this *node) parseHexImmediate(val string) error {
 	}
 }
 func (this *node) parseBinaryImmediate(val string) error {
-	this.Type = TypeBinaryImmediate
+	this.Type = typeBinaryImmediate
 	if v, err := parseBinaryImmediate(val[2:]); err != nil {
 		return err
 	} else {
@@ -170,7 +184,7 @@ func (this *node) parseBinaryImmediate(val string) error {
 	}
 }
 func (this *node) parseImmediate(val string) error {
-	this.Type = TypeImmediate
+	this.Type = typeImmediate
 	if v, err := parseDecimalImmediate(val[1:]); err != nil {
 		return err
 	} else {
@@ -179,16 +193,16 @@ func (this *node) parseImmediate(val string) error {
 	}
 }
 func (this *node) Parse() error {
-	if this.Type == TypeUnknown {
+	if this.Type == typeUnknown {
 		val := this.Value.(string)
 		if val == "=" {
-			this.Type = TypeEquals
+			this.Type = typeEquals
 		} else if val == "," {
-			this.Type = TypeComma
+			this.Type = typeComma
 		} else if strings.HasSuffix(val, ":") {
 			return this.parseLabel(val)
 		} else if strings.HasPrefix(val, ";") {
-			this.Type = TypeComma
+			this.Type = typeComma
 			this.Value = strings.TrimPrefix(val, ";")
 		} else if strings.HasPrefix(val, "#x") {
 			return this.parseHexImmediate(val)
@@ -204,10 +218,10 @@ func (this *node) Parse() error {
 }
 
 func (this *node) IsComment() bool {
-	return this.Type == TypeComment
+	return this.Type == typeComment
 }
 func (this *node) IsLabel() bool {
-	return this.Type == TypeLabel
+	return this.Type == typeLabel
 }
 
 type statement []node
@@ -220,7 +234,7 @@ func (this *statement) Add(value string, t nodeType) {
 	}
 }
 func (this *statement) AddUnknown(value string) {
-	this.Add(value, TypeUnknown)
+	this.Add(value, typeUnknown)
 }
 
 func carveLine(line string) statement {
@@ -241,17 +255,17 @@ func carveLine(line string) statement {
 			oldStart = start
 		} else if r == '=' {
 			s.AddUnknown(data[oldStart:start])
-			s.Add("=", TypeEquals)
+			s.Add("=", typeEquals)
 			oldStart = start + width
 		} else if r == ',' {
 			s.AddUnknown(data[oldStart:start])
-			s.Add(",", TypeComma)
+			s.Add(",", typeComma)
 			oldStart = start + width
 		} else if r == ';' {
 			// consume the rest of the data
 			s.AddUnknown(data[oldStart:start])
 			// then capture the comment
-			s.Add(data[start:], TypeComment)
+			s.Add(data[start:], typeComment)
 			oldStart = start
 			break
 		}
