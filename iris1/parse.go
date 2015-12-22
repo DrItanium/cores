@@ -47,6 +47,7 @@ func init() {
 
 type _parser struct {
 	core               *Core
+	statements         []statement
 	labels             labelMap
 	dataAddr, codeAddr Word
 	currSegment        segment
@@ -76,11 +77,15 @@ func (this *_parser) Process() error {
 func (this *_parser) Parse(lines <-chan parser.Entry) error {
 	for line := range lines {
 		stmt := carveLine(line.Line)
+		this.statements = append(this.statements, stmt)
+		fmt.Println("{")
 		for _, str := range stmt {
 			if err := str.Parse(); err != nil {
-				return fmt.Errorf("Error: Line %d: %s\n", line.Index, err)
+				return fmt.Errorf("Error: line: %d : %s\n", line.Index, err)
 			}
+			fmt.Println("\t", str)
 		}
+		fmt.Println("}")
 	}
 	return nil
 }
@@ -98,6 +103,7 @@ const (
 	typeHexImmediate
 	typeComment
 	typeSymbol
+	typeDirective
 )
 
 type node struct {
@@ -192,6 +198,21 @@ func (this *node) parseImmediate(val string) error {
 		return nil
 	}
 }
+func (this *node) parseRegister(val string) error {
+	this.Type = typeRegister
+	if v, err := parseRegisterValue(val[1:]); err != nil {
+		return err
+	} else {
+		this.Value = v
+		return nil
+	}
+}
+
+func (this *node) parseDirective(val string) error {
+	this.Type = typeDirective
+	this.Value = val[1:]
+	return nil
+}
 func (this *node) Parse() error {
 	if this.Type == typeUnknown {
 		val := this.Value.(string)
@@ -210,8 +231,10 @@ func (this *node) Parse() error {
 			return this.parseBinaryImmediate(val)
 		} else if strings.HasPrefix(val, "#") {
 			return this.parseImmediate(val)
-		} else {
-
+		} else if strings.HasPrefix(val, "r") {
+			return this.parseRegister(val)
+		} else if strings.HasPrefix(val, "@") {
+			return this.parseDirective(val)
 		}
 	}
 	return nil
@@ -224,17 +247,24 @@ func (this *node) IsLabel() bool {
 	return this.Type == typeLabel
 }
 
-type statement []node
+type statement []*node
 
 func (this *statement) Add(value string, t nodeType) {
 	// always trim before adding
 	str := strings.TrimSpace(value)
 	if len(str) > 0 {
-		*this = append(*this, node{Value: str, Type: t})
+		*this = append(*this, &node{Value: str, Type: t})
 	}
 }
 func (this *statement) AddUnknown(value string) {
 	this.Add(value, typeUnknown)
+}
+func (this *statement) String() string {
+	var str string
+	for _, n := range *this {
+		str += fmt.Sprintf(" %T: %s ", n, *n)
+	}
+	return str
 }
 
 func carveLine(line string) statement {
