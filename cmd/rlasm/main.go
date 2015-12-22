@@ -4,13 +4,18 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/DrItanium/cores/iris1"
+	"github.com/DrItanium/cores/registration"
+	"github.com/DrItanium/cores/registration/parser"
 	"os"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 )
+
+func init() {
+	registration.Register()
+}
 
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)

@@ -3,7 +3,7 @@ package parser
 
 import (
 	"fmt"
-	"github.com/DrItanium/cores/registration"
+	"github.com/DrItanium/cores"
 )
 
 var parsers map[string]Registration
@@ -16,7 +16,7 @@ type Registration interface {
 	New(args ...interface{}) (Parser, error)
 }
 type Parser interface {
-	registration.Dumper
+	cores.Dumper
 	Parse(lines <-chan Entry) error
 }
 

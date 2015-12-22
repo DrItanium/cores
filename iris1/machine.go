@@ -4,7 +4,7 @@ package iris1
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/DrItanium/edgeworth"
+	"github.com/DrItanium/cores/registration/machine"
 )
 
 func RegistrationName() string {
@@ -14,18 +14,18 @@ func RegistrationName() string {
 // Dummy function to force inclusion
 func Register() {}
 
-type Registrar func(...interface{}) (edgeworth.Machine, error)
+type Registrar func(...interface{}) (machine.Machine, error)
 
-func (this Registrar) New(args ...interface{}) (edgeworth.Machine, error) {
+func (this Registrar) New(args ...interface{}) (machine.Machine, error) {
 	return this(args)
 }
 
-func generateCore(a ...interface{}) (edgeworth.Machine, error) {
+func generateCore(a ...interface{}) (machine.Machine, error) {
 	return New()
 }
 
 func init() {
-	edgeworth.RegisterMachine(RegistrationName(), Registrar(generateCore))
+	machine.Register(RegistrationName(), Registrar(generateCore))
 }
 
 const (

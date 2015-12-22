@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/DrItanium/cores/registration"
-	"github.com/DrItanium/edgeworth"
+	"github.com/DrItanium/cores/registration/machine"
 	"io"
 	"os"
 )
@@ -19,7 +19,7 @@ func init() {
 }
 func listRegisteredTargets() {
 	fmt.Println("Supported targets: ")
-	for _, val := range edgeworth.RegisteredMachines() {
+	for _, val := range machine.GetRegistered() {
 		fmt.Println("\t - ", val)
 	}
 }
@@ -34,7 +34,7 @@ func main() {
 		flag.Usage()
 		listRegisteredTargets()
 		return
-	} else if !edgeworth.MachineExists(*target) {
+	} else if !machine.IsRegistered(*target) {
 		fmt.Printf("Specified target %s is not a supported target!\n", *target)
 		listRegisteredTargets()
 		return
@@ -42,7 +42,7 @@ func main() {
 	if len(flag.Args()) != 1 {
 		flag.Usage()
 		fmt.Println("Only one input file accepted!")
-	} else if mach, err0 := edgeworth.NewMachine(*target); err0 != nil {
+	} else if mach, err0 := machine.New(*target); err0 != nil {
 		fmt.Println(err0)
 	} else {
 		// install the program
@@ -51,7 +51,7 @@ func main() {
 		data := make(chan byte)
 
 		loadMemoryImage(flag.Args()[0], done, data)
-		go func(mach edgeworth.Machine, err chan error, data chan byte) {
+		go func(mach machine.Machine, err chan error, data chan byte) {
 			err <- mach.InstallProgram(data)
 		}(mach, done2, data)
 		for i := 0; i < 2; i++ {

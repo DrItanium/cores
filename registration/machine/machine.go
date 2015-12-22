@@ -3,7 +3,7 @@ package machine
 
 import (
 	"fmt"
-	"github.com/DrItanium/cores/registration"
+	"github.com/DrItanium/cores"
 )
 
 var registrations map[string]Registration
@@ -52,7 +52,7 @@ type Registration interface {
 	New(args ...interface{}) (Machine, error)
 }
 type Machine interface {
-	registration.Dumper
+	cores.Dumper
 	GetDebugStatus() bool
 	SetDebug(value bool)
 	InstallProgram(input <-chan byte) error
