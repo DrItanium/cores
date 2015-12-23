@@ -15,6 +15,7 @@ type segment int
 const (
 	codeSegment segment = iota
 	dataSegment
+	numSegments
 )
 
 type ParsingRegistrar func(...interface{}) (parser.Parser, error)
@@ -37,6 +38,7 @@ func generateParser(a ...interface{}) (parser.Parser, error) {
 	} else {
 		p.core = core
 		p.labels = make(labelMap)
+		p.aliases = make(map[string]byte)
 		return &p, nil
 	}
 }
@@ -45,12 +47,19 @@ func init() {
 	parser.Register(RegistrationName(), ParsingRegistrar(generateParser))
 }
 
+type indirectAddress struct {
+	seg     segment
+	label   string
+	address Word
+}
 type _parser struct {
-	core               *Core
-	statements         []statement
-	labels             labelMap
-	dataAddr, codeAddr Word
-	currSegment        segment
+	core              *Core
+	statements        []statement
+	labels            labelMap
+	addrs             [numSegments]Word
+	currSegment       segment
+	aliases           map[string]byte
+	indirectAddresses []indirectAddress
 }
 
 func (this *_parser) Dump(pipe chan<- byte) error {
@@ -69,8 +78,127 @@ func (this *_parser) Dump(pipe chan<- byte) error {
 	}
 	return nil
 }
+func (this *_parser) parseAlias(nodes []*node) error {
+	if len(nodes) == 0 {
+		return fmt.Errorf("alias directives require arguments!")
+	} else if len(nodes) < 3 {
+		return fmt.Errorf("too few arguments provided to the alias directive")
+	} else if len(nodes) > 4 {
+		return fmt.Errorf("too many arguments provided to the alias directive")
+	} else {
+		if len(nodes) == 4 && nodes[3].Type != typeComment {
+			return fmt.Errorf("last argument to an alias declaration is not a comment!")
+		}
+		title, eq, value := nodes[0], nodes[1], nodes[2]
+		if title.Type != typeSymbol && title.Type != typeUnknown {
+			return fmt.Errorf("Name of an alias must be a symbol!")
+		} else if eq.Type != typeEquals {
+			return fmt.Errorf("= symbol must be between name and target register in an alias declaration")
+		} else if value.Type != typeRegister {
+			return fmt.Errorf("an alias can only refer to a register or another alias!")
+		}
+		name := title.Value.(string)
+		if _, ok := this.aliases[name]; ok {
+			return fmt.Errorf("Already registered alias %s!", name)
+		}
+		this.aliases[name] = value.Value.(byte)
+		return nil
+	}
+}
+func (this *_parser) setSegment(nodes []*node, seg segment, name string) error {
+	if len(nodes) != 0 {
+		return fmt.Errorf("%s directive takes in no arguments!", name)
+	} else {
+		this.currSegment = seg
+		return nil
+	}
+}
+func (this *_parser) setPosition(nodes []*node) error {
+	if len(nodes) == 0 {
+		return fmt.Errorf("No arguments provided to org directive")
+	} else if len(nodes) > 1 {
+		return fmt.Errorf("Too many arguments provided to an org directive")
+	} else {
+		addr := nodes[0]
+		switch addr.Type {
+		case typeHexImmediate, typeBinaryImmediate, typeImmediate:
+			this.addrs[this.currSegment] = addr.Value.(Word)
+			return nil
+		default:
+			return fmt.Errorf("Org directive requires an immediate value")
+		}
+	}
+}
+
+func (this *_parser) setData(nodes []*node) error {
+	if len(nodes) == 0 {
+		return fmt.Errorf("Word directive requires a value")
+	} else if len(nodes) > 1 {
+		return fmt.Errorf("Too many arguments provided to the word directive!")
+	} else {
+		switch this.currSegment {
+		case codeSegment:
+			return fmt.Errorf("Word directives can't be in the code segment!")
+		case dataSegment:
+			addr := nodes[0]
+			switch addr.Type {
+			case typeHexImmediate, typeBinaryImmediate, typeImmediate:
+				this.core.data[this.addrs[this.currSegment]] = addr.Value.(Word)
+			case typeLabel:
+				this.indirectAddresses = append(this.indirectAddresses, indirectAddress{label: addr.Value.(string), seg: dataSegment, address: this.addrs[this.currSegment]})
+			default:
+				return fmt.Errorf("word directives can only accept immediates or labels right now")
+			}
+			this.addrs[this.currSegment]++
+			return nil
+		default:
+			panic("Programmer Failure! Found self in a illegal segment!")
+		}
+	}
+}
+func (this *_parser) newLabel(n *node) error {
+	name := n.Value.(string)
+	if _, ok := this.labels[name]; ok {
+		return fmt.Errorf("Label %s is already defined!", name)
+	} else {
+		this.labels[name] = labelEntry{
+			seg:  this.currSegment,
+			addr: this.addrs[this.currSegment],
+		}
+		return nil
+	}
+}
+
 func (this *_parser) Process() error {
-	// we'll probably want to process labels at this point
+	// build up labels and alias listings
+	for _, stmt := range this.statements {
+		// get the first element and perform a correct dispatch
+		first := stmt[0]
+		rest := stmt[1:]
+		switch first.Type {
+		case typeDirectiveAlias:
+			// go through the rest of the nodes
+			return this.parseAlias(rest)
+		case typeDirectiveCode:
+			if err := this.setSegment(rest, codeSegment, "code"); err != nil {
+				return err
+			}
+		case typeDirectiveData:
+			if err := this.setSegment(rest, dataSegment, "data"); err != nil {
+				return err
+			}
+		case typeDirectiveOrg:
+			return this.setPosition(rest)
+		case typeDirectiveWord:
+			return this.setData(rest)
+		case typeComment:
+			// do nothing, just continue
+		case typeUnknown:
+			fallthrough
+		default:
+			return fmt.Errorf("Unknown node %s", first.Value)
+		}
+	}
 	return nil
 }
 
