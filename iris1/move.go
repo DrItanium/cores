@@ -26,16 +26,10 @@ const (
 	// Move Operations
 	MoveOpMove = iota
 	MoveOpSwap
-	MoveOpSwapRegAddr
-	MoveOpSwapAddrAddr
-	MoveOpSwapRegMem
-	MoveOpSwapAddrMem
 	MoveOpSet
 	MoveOpLoad
 	MoveOpLoadMem
 	MoveOpStore
-	MoveOpStoreAddr
-	MoveOpStoreMem
 	MoveOpStoreImm
 	MoveOpPush
 	MoveOpPushImmediate
@@ -56,21 +50,19 @@ var unimplementedMoveOp = func(_ *Core, _ *DecodedInstruction) error { return fm
 var moveTable = [32]MoveOp{
 	moveRegister,
 	swapRegisters,
-	swapRegAddr,
-	swapAddrAddr,
-	swapRegMem,
-	swapAddrMem,
 	moveOpSet,
 	load,
 	loadImm,
 	store,
-	storeAddr,
-	storeMem,
 	storeImm,
 	moveOpPush,
 	moveOpPushImm,
 	moveOpPop,
 	moveOpPeek,
+	unimplementedMoveOp,
+	unimplementedMoveOp,
+	unimplementedMoveOp,
+	unimplementedMoveOp,
 	unimplementedMoveOp,
 	unimplementedMoveOp,
 	unimplementedMoveOp,
@@ -111,41 +103,9 @@ func swapRegisters(core *Core, inst *DecodedInstruction) error {
 	}
 	return nil
 }
-func swapRegAddr(core *Core, inst *DecodedInstruction) error {
-	dest := inst.Data[0]
-	src0 := inst.Data[1]
-	reg := core.Register(dest)
-	memaddr := core.Register(src0)
-	memcontents := core.DataMemory(memaddr)
-	return swapMemoryAndRegister(core, dest, reg, memaddr, memcontents)
-}
-func swapAddrAddr(core *Core, inst *DecodedInstruction) error {
-	dest := inst.Data[0]
-	src0 := inst.Data[1]
-	addr0 := core.Register(dest)
-	addr1 := core.Register(src0)
-	mem0 := core.DataMemory(addr0)
-	mem1 := core.DataMemory(addr1)
-	return swapMemory(core, addr0, mem0, addr1, mem1)
-
-}
-func swapRegMem(core *Core, inst *DecodedInstruction) error {
-	dest := inst.Data[0]
-	addr := inst.Immediate()
-	return swapMemoryAndRegister(core, dest, core.Register(dest), addr, core.DataMemory(addr))
-}
 func moveOpSet(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
 	return core.SetRegister(dest, inst.Immediate())
-}
-func swapAddrMem(core *Core, inst *DecodedInstruction) error {
-	dest := inst.Data[0]
-	addr0 := core.Register(dest)
-	addr1 := inst.Immediate()
-	mem0 := core.DataMemory(addr0)
-	mem1 := core.DataMemory(addr1)
-	return swapMemory(core, addr0, mem0, addr1, mem1)
-
 }
 func load(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
@@ -161,15 +121,6 @@ func store(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
 	src0 := inst.Data[1]
 	return core.SetDataMemory(core.Register(dest), core.Register(src0))
-}
-func storeAddr(core *Core, inst *DecodedInstruction) error {
-	dest := inst.Data[0]
-	src0 := inst.Data[1]
-	return core.SetDataMemory(core.Register(dest), core.DataMemory(core.Register(src0)))
-}
-func storeMem(core *Core, inst *DecodedInstruction) error {
-	dest := inst.Data[0]
-	return core.SetDataMemory(core.Register(dest), core.DataMemory(inst.Immediate()))
 }
 
 func storeImm(core *Core, inst *DecodedInstruction) error {
