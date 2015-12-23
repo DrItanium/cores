@@ -104,6 +104,47 @@ const (
 	typeComment
 	typeSymbol
 	typeDirective
+	typeDirectiveData
+	typeDirectiveCode
+	typeDirectiveOrg
+	typeDirectiveDeclare
+	// keywords
+	// memory words
+	keywordSet
+	keywordMove
+	keywordLoad
+	keywordStore
+	// branch words
+	keywordBranch
+	keywordIf0
+	keywordIf1
+	keywordLink
+	keywordThen
+	keywordElse
+	// arithmetic words
+	keywordAdd
+	keywordSub
+	keywordMul
+	keywordDiv
+	keywordRem
+	keywordShiftLeft
+	keywordShiftRight
+	keywordAnd
+	keywordOr
+	keywordNot
+	keywordXor
+	keywordIncrement
+	keywordDecrement
+	keywordHalve
+	// compare words
+	keywordEqual
+	keywordNotEqual
+	keywordLessThan
+	keywordGreaterThan
+	keywordLessThanOrEqualTo
+	keywordGreaterThanOrEqualTo
+	// misc words
+	keywordSystem
 )
 
 type node struct {
@@ -208,9 +249,57 @@ func (this *node) parseRegister(val string) error {
 	}
 }
 
+var directives = map[string]nodeType{
+	{"data", typeDirectiveData},
+	{"code", typeDirectiveCode},
+	{"org", typeDirectiveOrg},
+	{"declare", typeDirectiveDeclare},
+}
+
 func (this *node) parseDirective(val string) error {
-	this.Type = typeDirective
-	this.Value = val[1:]
+	str := val[1:]
+	this.Value = str
+	if q, ok := directives[str]; ok {
+		this.Type = q
+	} else {
+		this.Type = typeDirective
+	}
+	return nil
+}
+
+var keywords = map[string]nodeType{
+	{"branch", keywordBranch},
+	{"if0", keywordIf0},
+	{"if1", keywordIf1},
+	{"then", keywordThen},
+	{"else", keywordElse},
+	{"link", keywordLink},
+	{"add", keywordAdd},
+	{"sub", keywordSub},
+	{"mul", keywordMul},
+	{"div", keywordDiv},
+	{"rem", keywordRem},
+	{"shiftleft", keywordShiftLeft},
+	{"shiftright", keywordShiftRight},
+	{"and", keywordAnd},
+	{"or", keywordOr},
+	{"not", keywordNot},
+	{"xor", keywordXor},
+	{"halve", keywordHalve},
+	{"incr", keywordIncrement},
+	{"decr", keywordDecrement},
+	{"system", keywordSystem},
+	{"set", keywordSet},
+	{"move", keywordMove},
+	{"swap", keywordSwap},
+	{"load", keywordLoad},
+	{"store", keywordStore},
+}
+
+func (this *node) parseGeneric(str string) error {
+	if v, ok := keywords[str]; ok {
+		this.Type = v
+	}
 	return nil
 }
 func (this *node) Parse() error {
@@ -235,6 +324,8 @@ func (this *node) Parse() error {
 			return this.parseRegister(val)
 		} else if strings.HasPrefix(val, "@") {
 			return this.parseDirective(val)
+		} else {
+			return this.parseGeneric(val)
 		}
 	}
 	return nil
