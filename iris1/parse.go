@@ -168,35 +168,222 @@ func (this *_parser) newLabel(n *node) error {
 		return nil
 	}
 }
-
+func (this *_parser) resolveAlias(alias string) (byte, error) {
+	if v, ok := this.aliases[alias]; !ok {
+		return 0, fmt.Errorf("Alias %s does not exist!", alias)
+	} else {
+		return v, nil
+	}
+}
+func (this *_parser) resolveRegister(n *node) (byte, error) {
+	switch n.Type {
+	case typeRegister:
+		return n.Value.(byte), nil
+	case typeAlias:
+		return this.resolveAlias(n.Value.(string))
+	default:
+		return 0, fmt.Errorf("Illegal node type provided for register resolution!")
+	}
+}
+func (this *_parser) parseArithmetic(t *node, nodes []*node) error {
+	if this.currSegment != codeSegment {
+		return fmt.Errorf("Instructions can't go into the data segment")
+	}
+	var inst Instruction
+	inst.setGroup(InstructionGroupArithmetic)
+	switch len(nodes) {
+	case 0, 1, 2, 4:
+		return fmt.Errorf("Too few arguments provided for an arithmetic instruction")
+	case 3:
+		// increment, decrement, double, and halve forms
+		if dest := nodes[0]; dest.Type != typeRegister && dest.Type != typeAlias {
+			return fmt.Errorf("The destination operand must be a register or alias")
+		} else if nodes[1].Type != typeEquals {
+			return fmt.Errorf("The destination register of a arithmetic instruction must be separated from the source register with an =")
+		} else if src0 := nodes[2]; src0.Type != typeRegister && src0.Type != typeAlias {
+			return fmt.Errorf("The source operand must be a register or alias")
+		} else {
+			if dv, err := this.resolveRegister(dest); err != nil {
+				return err
+			} else if sv0, err := this.resolveRegister(src0); err != nil {
+				return err
+			} else {
+				inst.setByte(1, dv)
+				inst.setByte(2, sv0)
+				inst.setByte(3, 0)
+			}
+			switch t.Type {
+			case keywordHalve:
+				inst.setOp(ArithmeticOpHalve)
+			case keywordDouble:
+				inst.setOp(ArithmeticOpDouble)
+			case keywordIncrement:
+				inst.setOp(ArithmeticOpIncrement)
+			case keywordDecrement:
+				inst.setOp(ArithmeticOpDecrement)
+			default:
+				return fmt.Errorf("Illegal arithmetic operation %s", t.Value)
+			}
+		}
+	case 6:
+		if comment := nodes[5]; comment.Type != typeComment {
+			return fmt.Errorf("Found an extra argument for an arithmetic instruction")
+		}
+		fallthrough
+	case 5:
+		// check all of the arguments
+		if dest := nodes[0]; dest.Type != typeRegister && dest.Type != typeAlias {
+			return fmt.Errorf("The destination operand must be a register or alias")
+		} else if nodes[1].Type != typeEquals {
+			return fmt.Errorf("The destination register of a arithmetic instruction must be separated from the source registers with an =")
+		} else if src0 := nodes[2]; src0.Type != typeRegister && src0.Type != typeAlias {
+			return fmt.Errorf("The first source operand must be a register or alias")
+		} else if nodes[3].Type != typeComma {
+			return fmt.Errorf("The source operands of an arithmetic instruction must be separated by a comma")
+		} else if src1 := nodes[4]; src1.Type != typeRegister && src1.Type != typeAlias && src1.Type != typeImmediate && src1.Type != typeHexImmediate && src1.Type != typeBinaryImmediate {
+			return fmt.Errorf("The second source operand must be a register, alias, or 8-bit immediate")
+		} else {
+			if dv, err := this.resolveRegister(dest); err != nil {
+				return err
+			} else if sv0, err := this.resolveRegister(src0); err != nil {
+				return err
+			} else {
+				inst.setByte(1, dv)
+				inst.setByte(2, sv0)
+			}
+			if src1.Type == typeImmediate || src1.Type == typeHexImmediate || src1.Type == typeBinaryImmediate {
+				// immediate form
+				if immediate := src1.Value.(Word); immediate > 255 {
+					return fmt.Errorf("Immediate value for arithmetic operation is too large: %d > 255", immediate)
+				} else {
+					inst.setByte(3, byte(immediate))
+				}
+				switch t.Type {
+				case keywordAdd:
+					inst.setOp(ArithmeticOpAddImmediate)
+				case keywordSub:
+					inst.setOp(ArithmeticOpSubImmediate)
+				case keywordMul:
+					inst.setOp(ArithmeticOpMulImmediate)
+				case keywordDiv:
+					inst.setOp(ArithmeticOpDivImmediate)
+				case keywordRem:
+					inst.setOp(ArithmeticOpRemImmediate)
+				case keywordShiftLeft:
+					inst.setOp(ArithmeticOpShiftLeftImmediate)
+				case keywordShiftRight:
+					inst.setOp(ArithmeticOpShiftRightImmediate)
+				default:
+					return fmt.Errorf("Arithmetic operation %s does not have an immediate form!", t.Value)
+				}
+			} else {
+				switch t.Type {
+				case keywordAdd:
+					inst.setOp(ArithmeticOpAdd)
+				case keywordSub:
+					inst.setOp(ArithmeticOpSub)
+				case keywordMul:
+					inst.setOp(ArithmeticOpMul)
+				case keywordDiv:
+					inst.setOp(ArithmeticOpDiv)
+				case keywordRem:
+					inst.setOp(ArithmeticOpRem)
+				case keywordShiftLeft:
+					inst.setOp(ArithmeticOpShiftLeft)
+				case keywordShiftRight:
+					inst.setOp(ArithmeticOpShiftRight)
+				case keywordAnd:
+					inst.setOp(ArithmeticOpBinaryAnd)
+				case keywordOr:
+					inst.setOp(ArithmeticOpBinaryOr)
+				case keywordNot:
+					inst.setOp(ArithmeticOpBinaryNot)
+				case keywordXor:
+					inst.setOp(ArithmeticOpBinaryXor)
+				default:
+					return fmt.Errorf("Illegal arithmetic operation %s", t.Value)
+				}
+				// parse it like the other registers at this point
+				if sv1, err := this.resolveRegister(src1); err != nil {
+					return err
+				} else {
+					inst.setByte(3, sv1)
+				}
+			}
+		}
+	default:
+		return fmt.Errorf("Too many arguments provided for an arithmetic instruction")
+	}
+	// now setup the code section
+	this.core.code[this.addrs[this.currSegment]] = inst
+	this.addrs[this.currSegment]++
+	return nil
+}
+func (this *_parser) parseStatement(stmt *statement) error {
+	// get the first element and perform a correct dispatch
+	first, err := stmt.First()
+	if err != nil {
+		return err
+	}
+	rest := stmt.Rest()
+	switch first.Type {
+	case typeComment: // do nothing, just continue
+		if len(rest) > 0 {
+			panic("Programmer Failure! Found something following a comment node in a statement. This is impossible!!!!")
+		} else {
+			return nil
+		}
+	case typeLabel:
+		if err := this.newLabel(first); err != nil {
+			return err
+		} else if len(rest) > 0 {
+			// if there are more entries on the line then check them out
+			s := statement(rest)
+			return this.parseStatement(&s)
+		} else {
+			return nil
+		}
+	case keywordAdd, keywordSub, keywordMul, keywordDiv, keywordRem, keywordShiftLeft, keywordShiftRight, keywordAnd, keywordOr, keywordNot, keywordXor, keywordIncrement, keywordDecrement, keywordHalve:
+		return this.parseArithmetic(first, rest)
+	//case keywordBranch, keywordIf0, keywordIf1:
+	//	return this.parseBranch(first.Type, rest)
+	//case keywordEqual, keywordNotEqual, keywordLessThan, keywordGreaterThan, keywordLessThanOrEqualTo, keywordGreaterThanOrEqualTo:
+	//	return this.parseCompare(first.Type, rest)
+	//case keywordMove, keywordSet, keywordSwap, keywordLoad, keywordStore:
+	//	return this.parseMove(first.Type, rest)
+	//case keywordSystem:
+	//	return this.parseMisc(first.Type, rest)
+	case typeDirectiveAlias:
+		// go through the rest of the nodes
+		return this.parseAlias(rest)
+	case typeDirectiveCode:
+		if err := this.setSegment(rest, codeSegment, "code"); err != nil {
+			return err
+		}
+	case typeDirectiveData:
+		if err := this.setSegment(rest, dataSegment, "data"); err != nil {
+			return err
+		}
+	case typeDirectiveOrg:
+		return this.setPosition(rest)
+	case typeDirectiveWord:
+		return this.setData(rest)
+	case typeComma:
+		return fmt.Errorf("Can't start a line with a comma")
+	case typeEquals:
+		return fmt.Errorf("Can't start a line with a equals sign")
+	case typeUnknown:
+		return fmt.Errorf("Unknown node %s", first.Value)
+	default:
+		return fmt.Errorf("Unhandled nodeType %d: %s", first.Type, first.Value)
+	}
+	return nil
+}
 func (this *_parser) Process() error {
 	// build up labels and alias listings
 	for _, stmt := range this.statements {
-		// get the first element and perform a correct dispatch
-		first := stmt[0]
-		rest := stmt[1:]
-		switch first.Type {
-		case typeDirectiveAlias:
-			// go through the rest of the nodes
-			return this.parseAlias(rest)
-		case typeDirectiveCode:
-			if err := this.setSegment(rest, codeSegment, "code"); err != nil {
-				return err
-			}
-		case typeDirectiveData:
-			if err := this.setSegment(rest, dataSegment, "data"); err != nil {
-				return err
-			}
-		case typeDirectiveOrg:
-			return this.setPosition(rest)
-		case typeDirectiveWord:
-			return this.setData(rest)
-		case typeComment:
-			// do nothing, just continue
-		case typeUnknown:
-			fallthrough
-		default:
-			return fmt.Errorf("Unknown node %s", first.Value)
+		if err := this.parseStatement(&stmt); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -267,6 +454,7 @@ const (
 	keywordIncrement
 	keywordDecrement
 	keywordHalve
+	keywordDouble
 	// compare words
 	keywordEqual
 	keywordNotEqual
@@ -432,6 +620,7 @@ var keywords = map[string]nodeType{
 	"swap":       keywordSwap,
 	"load":       keywordLoad,
 	"store":      keywordStore,
+	"double":     keywordDouble,
 }
 
 func (this *node) parseGeneric(str string) error {
@@ -496,6 +685,16 @@ func (this *statement) String() string {
 		str += fmt.Sprintf(" %T: %s ", n, *n)
 	}
 	return str
+}
+func (this *statement) First() (*node, error) {
+	if len(*this) == 0 {
+		return nil, fmt.Errorf("Empty statement!")
+	} else {
+		return (*this)[0], nil
+	}
+}
+func (this *statement) Rest() []*node {
+	return (*this)[1:]
 }
 
 func carveLine(line string) statement {
