@@ -78,14 +78,13 @@ func (this *_parser) Parse(lines <-chan parser.Entry) error {
 	for line := range lines {
 		stmt := carveLine(line.Line)
 		this.statements = append(this.statements, stmt)
-		fmt.Println("{")
 		for _, str := range stmt {
 			if err := str.Parse(); err != nil {
 				return fmt.Errorf("Error: line: %d : %s\n", line.Index, err)
 			}
-			fmt.Println("\t", str)
+			fmt.Print("\t", str, " ")
 		}
-		fmt.Println("}")
+		fmt.Println()
 	}
 	return nil
 }
@@ -103,17 +102,21 @@ const (
 	typeHexImmediate
 	typeComment
 	typeSymbol
+	typeAlias
+	// directives
 	typeDirective
 	typeDirectiveData
 	typeDirectiveCode
 	typeDirectiveOrg
-	typeDirectiveDeclare
+	typeDirectiveWord
+	typeDirectiveAlias
 	// keywords
 	// memory words
 	keywordSet
 	keywordMove
 	keywordLoad
 	keywordStore
+	keywordSwap
 	// branch words
 	keywordBranch
 	keywordIf0
@@ -250,10 +253,11 @@ func (this *node) parseRegister(val string) error {
 }
 
 var directives = map[string]nodeType{
-	{"data", typeDirectiveData},
-	{"code", typeDirectiveCode},
-	{"org", typeDirectiveOrg},
-	{"declare", typeDirectiveDeclare},
+	"data":  typeDirectiveData,
+	"code":  typeDirectiveCode,
+	"org":   typeDirectiveOrg,
+	"word":  typeDirectiveWord,
+	"alias": typeDirectiveAlias,
 }
 
 func (this *node) parseDirective(val string) error {
@@ -267,33 +271,39 @@ func (this *node) parseDirective(val string) error {
 	return nil
 }
 
+func (this *node) parseAlias(str string) error {
+	this.Value = str[1:]
+	this.Type = typeAlias
+	return nil
+}
+
 var keywords = map[string]nodeType{
-	{"branch", keywordBranch},
-	{"if0", keywordIf0},
-	{"if1", keywordIf1},
-	{"then", keywordThen},
-	{"else", keywordElse},
-	{"link", keywordLink},
-	{"add", keywordAdd},
-	{"sub", keywordSub},
-	{"mul", keywordMul},
-	{"div", keywordDiv},
-	{"rem", keywordRem},
-	{"shiftleft", keywordShiftLeft},
-	{"shiftright", keywordShiftRight},
-	{"and", keywordAnd},
-	{"or", keywordOr},
-	{"not", keywordNot},
-	{"xor", keywordXor},
-	{"halve", keywordHalve},
-	{"incr", keywordIncrement},
-	{"decr", keywordDecrement},
-	{"system", keywordSystem},
-	{"set", keywordSet},
-	{"move", keywordMove},
-	{"swap", keywordSwap},
-	{"load", keywordLoad},
-	{"store", keywordStore},
+	"branch":     keywordBranch,
+	"if0":        keywordIf0,
+	"if1":        keywordIf1,
+	"then":       keywordThen,
+	"else":       keywordElse,
+	"link":       keywordLink,
+	"add":        keywordAdd,
+	"sub":        keywordSub,
+	"mul":        keywordMul,
+	"div":        keywordDiv,
+	"rem":        keywordRem,
+	"shiftleft":  keywordShiftLeft,
+	"shiftright": keywordShiftRight,
+	"and":        keywordAnd,
+	"or":         keywordOr,
+	"not":        keywordNot,
+	"xor":        keywordXor,
+	"halve":      keywordHalve,
+	"incr":       keywordIncrement,
+	"decr":       keywordDecrement,
+	"system":     keywordSystem,
+	"set":        keywordSet,
+	"move":       keywordMove,
+	"swap":       keywordSwap,
+	"load":       keywordLoad,
+	"store":      keywordStore,
 }
 
 func (this *node) parseGeneric(str string) error {
@@ -312,7 +322,7 @@ func (this *node) Parse() error {
 		} else if strings.HasSuffix(val, ":") {
 			return this.parseLabel(val)
 		} else if strings.HasPrefix(val, ";") {
-			this.Type = typeComma
+			this.Type = typeComment
 			this.Value = strings.TrimPrefix(val, ";")
 		} else if strings.HasPrefix(val, "#x") {
 			return this.parseHexImmediate(val)
@@ -322,8 +332,10 @@ func (this *node) Parse() error {
 			return this.parseImmediate(val)
 		} else if strings.HasPrefix(val, "r") {
 			return this.parseRegister(val)
-		} else if strings.HasPrefix(val, "@") {
+		} else if strings.HasPrefix(val, ".") {
 			return this.parseDirective(val)
+		} else if strings.HasPrefix(val, "?") {
+			return this.parseAlias(val)
 		} else {
 			return this.parseGeneric(val)
 		}
