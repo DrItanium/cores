@@ -483,6 +483,92 @@ func (this *_parser) parseMove(first *node, rest []*node) error {
 	}
 }
 
+var compareTable = map[nodeType]map[nodeType]byte{
+	keywordEqual: map[nodeType]byte{
+		typeEquals: CompareOpEq,
+		typeAnd:    CompareOpEqAnd,
+		typeOr:     CompareOpEqOr,
+		typeXor:    CompareOpEqXor,
+	},
+	keywordNotEqual: map[nodeType]byte{
+		typeEquals: CompareOpNeq,
+		typeAnd:    CompareOpNeqAnd,
+		typeOr:     CompareOpNeqOr,
+		typeXor:    CompareOpNeqXor,
+	},
+	keywordLessThan: map[nodeType]byte{
+		typeEquals: CompareOpLessThan,
+		typeAnd:    CompareOpLessThanAnd,
+		typeOr:     CompareOpLessThanOr,
+		typeXor:    CompareOpLessThanXor,
+	},
+	keywordGreaterThan: map[nodeType]byte{
+		typeEquals: CompareOpGreaterThan,
+		typeAnd:    CompareOpGreaterThanAnd,
+		typeOr:     CompareOpGreaterThanOr,
+		typeXor:    CompareOpGreaterThanXor,
+	},
+	keywordLessThanOrEqualTo: map[nodeType]byte{
+		typeEquals: CompareOpLessThanOrEqualTo,
+		typeAnd:    CompareOpLessThanOrEqualToAnd,
+		typeOr:     CompareOpLessThanOrEqualToOr,
+		typeXor:    CompareOpLessThanOrEqualToXor,
+	},
+	keywordGreaterThanOrEqualTo: map[nodeType]byte{
+		typeEquals: CompareOpGreaterThanOrEqualTo,
+		typeAnd:    CompareOpGreaterThanOrEqualToAnd,
+		typeOr:     CompareOpGreaterThanOrEqualToOr,
+		typeXor:    CompareOpGreaterThanOrEqualToXor,
+	},
+}
+
+func (this nodeType) compareOperation() bool {
+	return this == typeEquals || this == typeOr || this == typeAnd || this == typeXor
+}
+func (this *_parser) parseCompare(first *node, rest []*node) error {
+	if this.currSegment != codeSegment {
+		return fmt.Errorf("Not in a code segment for this instruction")
+	}
+	var d DecodedInstruction
+	d.Group = InstructionGroupCompare
+	switch len(rest) {
+	case 0, 1, 2, 3, 4:
+		return fmt.Errorf("Too few arguments provided for the given compare operation")
+	case 6:
+		if rest[5].Type != typeComment {
+			return fmt.Errorf("Too many arguments for the given compare operation")
+		}
+		fallthrough
+	case 5:
+		if dest := rest[0]; !dest.Type.registerOrAlias() {
+			return fmt.Errorf("The destination of a compare operation must be a register or alias")
+		} else if update := rest[1]; !update.Type.compareOperation() {
+			return fmt.Errorf("Illegal assignment symbol %s for compare operation", update.Value)
+		} else if sv0 := rest[2]; !sv0.Type.registerOrAlias() {
+			return fmt.Errorf("The first source argument of a compare operation must be a register or alias")
+		} else if rest[3].Type != typeComma {
+			return fmt.Errorf("Source arguments in a compare operation must be separated by a comma!")
+		} else if sv1 := rest[4]; !sv1.Type.registerOrAlias() {
+			return fmt.Errorf("Second source argument in a compare operation must be a register or alias")
+		} else {
+			// determine the corresponding op
+			d.Op = compareTable[first.Type][update.Type]
+			if dv, err := this.resolveRegister(dest); err != nil {
+				return err
+			} else if s0, err := this.resolveRegister(sv0); err != nil {
+				return err
+			} else if s1, err := this.resolveRegister(sv1); err != nil {
+				return err
+			} else {
+				d.Data = [3]byte{dv, s0, s1}
+			}
+		}
+	default:
+		return fmt.Errorf("Too many arguments provided to given compare operation")
+	}
+	return this.installInstruction(d.Encode())
+}
+
 func (this *_parser) parseStatement(stmt *statement) error {
 	// get the first element and perform a correct dispatch
 	first, err := stmt.First()
@@ -513,8 +599,8 @@ func (this *_parser) parseStatement(stmt *statement) error {
 		return this.parseArithmetic(first, rest)
 	case keywordMove, keywordSet, keywordSwap, keywordLoad, keywordStore:
 		return this.parseMove(first, rest)
-	//case keywordEqual, keywordNotEqual, keywordLessThan, keywordGreaterThan, keywordLessThanOrEqualTo, keywordGreaterThanOrEqualTo:
-	//	return this.parseCompare(first, rest)
+	case keywordEqual, keywordNotEqual, keywordLessThan, keywordGreaterThan, keywordLessThanOrEqualTo, keywordGreaterThanOrEqualTo:
+		return this.parseCompare(first, rest)
 	//case keywordBranch, keywordIf0, keywordIf1:
 	//	return this.parseBranch(first.Type, rest)
 	//case keywordSystem:
@@ -651,45 +737,6 @@ const (
 	// misc words
 	keywordSystem
 )
-
-var compareTable = map[nodeType]map[nodeType]byte{
-	keywordEqual: map[nodeType]byte{
-		typeEquals: CompareOpEq,
-		typeAnd:    CompareOpEqAnd,
-		typeOr:     CompareOpEqOr,
-		typeXor:    CompareOpEqXor,
-	},
-	keywordNotEqual: map[nodeType]byte{
-		typeEquals: CompareOpNeq,
-		typeAnd:    CompareOpNeqAnd,
-		typeOr:     CompareOpNeqOr,
-		typeXor:    CompareOpNeqXor,
-	},
-	keywordLessThan: map[nodeType]byte{
-		typeEquals: CompareOpLessThan,
-		typeAnd:    CompareOpLessThanAnd,
-		typeOr:     CompareOpLessThanOr,
-		typeXor:    CompareOpLessThanXor,
-	},
-	keywordGreaterThan: map[nodeType]byte{
-		typeEquals: CompareOpGreaterThan,
-		typeAnd:    CompareOpGreaterThanAnd,
-		typeOr:     CompareOpGreaterThanOr,
-		typeXor:    CompareOpGreaterThanXor,
-	},
-	keywordLessThanOrEqualTo: map[nodeType]byte{
-		typeEquals: CompareOpLessThanOrEqualTo,
-		typeAnd:    CompareOpLessThanOrEqualToAnd,
-		typeOr:     CompareOpLessThanOrEqualToOr,
-		typeXor:    CompareOpLessThanOrEqualToXor,
-	},
-	keywordGreaterThanOrEqualTo: map[nodeType]byte{
-		typeEquals: CompareOpGreaterThanOrEqualTo,
-		typeAnd:    CompareOpGreaterThanOrEqualToAnd,
-		typeOr:     CompareOpGreaterThanOrEqualToOr,
-		typeXor:    CompareOpGreaterThanOrEqualToXor,
-	},
-}
 
 type node struct {
 	Value interface{}
@@ -846,6 +893,12 @@ var keywords = map[string]nodeType{
 	"load":       keywordLoad,
 	"store":      keywordStore,
 	"double":     keywordDouble,
+	"eq":         keywordEqual,
+	"ne":         keywordNotEqual,
+	"lt":         keywordLessThan,
+	"gt":         keywordGreaterThan,
+	"le":         keywordLessThanOrEqualTo,
+	"ge":         keywordGreaterThanOrEqualTo,
 }
 
 func (this *node) parseGeneric(str string) error {
