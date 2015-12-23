@@ -52,14 +52,26 @@ type indirectAddress struct {
 	label   string
 	address Word
 }
+type deferredInstruction struct {
+	addr    Word
+	inst    *DecodedInstruction
+	trouble *node
+}
+
 type _parser struct {
-	core              *Core
-	statements        []statement
-	labels            labelMap
-	addrs             [numSegments]Word
-	currSegment       segment
-	aliases           map[string]byte
-	indirectAddresses []indirectAddress
+	core                 *Core
+	statements           []statement
+	labels               labelMap
+	addrs                [numSegments]Word
+	currSegment          segment
+	aliases              map[string]byte
+	indirectAddresses    []indirectAddress
+	deferredInstructions []deferredInstruction
+}
+
+func (this *_parser) Defer(inst *DecodedInstruction, trouble *node) {
+	this.deferredInstructions = append(this.deferredInstructions, deferredInstruction{addr: this.addrs[codeSegment], inst: inst, trouble: trouble})
+	this.addrs[codeSegment]++
 }
 
 func (this *_parser) Dump(pipe chan<- byte) error {
@@ -89,10 +101,10 @@ func (this *_parser) parseAlias(nodes []*node) error {
 		if len(nodes) == 4 && nodes[3].Type != typeComment {
 			return fmt.Errorf("last argument to an alias declaration is not a comment!")
 		}
-		title, eq, value := nodes[0], nodes[1], nodes[2]
-		if title.Type != typeSymbol && title.Type != typeUnknown {
+		title, value := nodes[0], nodes[2]
+		if title.Type != typeSymbol && title.Type != typeId {
 			return fmt.Errorf("Name of an alias must be a symbol!")
-		} else if eq.Type != typeEquals {
+		} else if nodes[1].Type != typeEquals {
 			return fmt.Errorf("= symbol must be between name and target register in an alias declaration")
 		} else if value.Type != typeRegister {
 			return fmt.Errorf("an alias can only refer to a register or another alias!")
@@ -186,21 +198,23 @@ func (this *_parser) resolveRegister(n *node) (byte, error) {
 	}
 }
 func (this *_parser) parseArithmetic(t *node, nodes []*node) error {
-	if this.currSegment != codeSegment {
-		return fmt.Errorf("Instructions can't go into the data segment")
-	}
-	var inst Instruction
-	inst.setGroup(InstructionGroupArithmetic)
+	var inst DecodedInstruction
+	inst.Group = InstructionGroupArithmetic
 	switch len(nodes) {
-	case 0, 1, 2, 4:
+	case 0, 1, 2:
 		return fmt.Errorf("Too few arguments provided for an arithmetic instruction")
+	case 4:
+		if nodes[3].Type != typeComment {
+			return fmt.Errorf("Found an extra argument for an arithmetic instruction")
+		}
+		fallthrough
 	case 3:
 		// increment, decrement, double, and halve forms
-		if dest := nodes[0]; dest.Type != typeRegister && dest.Type != typeAlias {
+		if dest := nodes[0]; dest.Type.registerOrAlias() {
 			return fmt.Errorf("The destination operand must be a register or alias")
 		} else if nodes[1].Type != typeEquals {
 			return fmt.Errorf("The destination register of a arithmetic instruction must be separated from the source register with an =")
-		} else if src0 := nodes[2]; src0.Type != typeRegister && src0.Type != typeAlias {
+		} else if src0 := nodes[2]; dest.Type.registerOrAlias() {
 			return fmt.Errorf("The source operand must be a register or alias")
 		} else {
 			if dv, err := this.resolveRegister(dest); err != nil {
@@ -208,39 +222,37 @@ func (this *_parser) parseArithmetic(t *node, nodes []*node) error {
 			} else if sv0, err := this.resolveRegister(src0); err != nil {
 				return err
 			} else {
-				inst.setByte(1, dv)
-				inst.setByte(2, sv0)
-				inst.setByte(3, 0)
+				inst.Data = [3]byte{dv, sv0, 0}
 			}
 			switch t.Type {
 			case keywordHalve:
-				inst.setOp(ArithmeticOpHalve)
+				inst.Op = ArithmeticOpHalve
 			case keywordDouble:
-				inst.setOp(ArithmeticOpDouble)
+				inst.Op = ArithmeticOpDouble
 			case keywordIncrement:
-				inst.setOp(ArithmeticOpIncrement)
+				inst.Op = ArithmeticOpIncrement
 			case keywordDecrement:
-				inst.setOp(ArithmeticOpDecrement)
+				inst.Op = ArithmeticOpDecrement
 			default:
 				return fmt.Errorf("Illegal arithmetic operation %s", t.Value)
 			}
 		}
 	case 6:
-		if comment := nodes[5]; comment.Type != typeComment {
+		if nodes[5].Type != typeComment {
 			return fmt.Errorf("Found an extra argument for an arithmetic instruction")
 		}
 		fallthrough
 	case 5:
 		// check all of the arguments
-		if dest := nodes[0]; dest.Type != typeRegister && dest.Type != typeAlias {
+		if dest := nodes[0]; !dest.Type.registerOrAlias() {
 			return fmt.Errorf("The destination operand must be a register or alias")
 		} else if nodes[1].Type != typeEquals {
 			return fmt.Errorf("The destination register of a arithmetic instruction must be separated from the source registers with an =")
-		} else if src0 := nodes[2]; src0.Type != typeRegister && src0.Type != typeAlias {
+		} else if src0 := nodes[2]; !src0.Type.registerOrAlias() {
 			return fmt.Errorf("The first source operand must be a register or alias")
 		} else if nodes[3].Type != typeComma {
 			return fmt.Errorf("The source operands of an arithmetic instruction must be separated by a comma")
-		} else if src1 := nodes[4]; src1.Type != typeRegister && src1.Type != typeAlias && src1.Type != typeImmediate && src1.Type != typeHexImmediate && src1.Type != typeBinaryImmediate {
+		} else if src1 := nodes[4]; !src1.Type.registerOrAlias() && !src1.Type.immediate() {
 			return fmt.Errorf("The second source operand must be a register, alias, or 8-bit immediate")
 		} else {
 			if dv, err := this.resolveRegister(dest); err != nil {
@@ -248,58 +260,57 @@ func (this *_parser) parseArithmetic(t *node, nodes []*node) error {
 			} else if sv0, err := this.resolveRegister(src0); err != nil {
 				return err
 			} else {
-				inst.setByte(1, dv)
-				inst.setByte(2, sv0)
+				inst.Data[0], inst.Data[1] = dv, sv0
 			}
-			if src1.Type == typeImmediate || src1.Type == typeHexImmediate || src1.Type == typeBinaryImmediate {
+			if src1.Type.immediate() {
 				// immediate form
 				if immediate := src1.Value.(Word); immediate > 255 {
 					return fmt.Errorf("Immediate value for arithmetic operation is too large: %d > 255", immediate)
 				} else {
-					inst.setByte(3, byte(immediate))
+					inst.Data[2] = byte(immediate)
 				}
 				switch t.Type {
 				case keywordAdd:
-					inst.setOp(ArithmeticOpAddImmediate)
+					inst.Op = ArithmeticOpAddImmediate
 				case keywordSub:
-					inst.setOp(ArithmeticOpSubImmediate)
+					inst.Op = ArithmeticOpSubImmediate
 				case keywordMul:
-					inst.setOp(ArithmeticOpMulImmediate)
+					inst.Op = ArithmeticOpMulImmediate
 				case keywordDiv:
-					inst.setOp(ArithmeticOpDivImmediate)
+					inst.Op = ArithmeticOpDivImmediate
 				case keywordRem:
-					inst.setOp(ArithmeticOpRemImmediate)
+					inst.Op = ArithmeticOpRemImmediate
 				case keywordShiftLeft:
-					inst.setOp(ArithmeticOpShiftLeftImmediate)
+					inst.Op = ArithmeticOpShiftLeftImmediate
 				case keywordShiftRight:
-					inst.setOp(ArithmeticOpShiftRightImmediate)
+					inst.Op = ArithmeticOpShiftRightImmediate
 				default:
 					return fmt.Errorf("Arithmetic operation %s does not have an immediate form!", t.Value)
 				}
 			} else {
 				switch t.Type {
 				case keywordAdd:
-					inst.setOp(ArithmeticOpAdd)
+					inst.Op = ArithmeticOpAdd
 				case keywordSub:
-					inst.setOp(ArithmeticOpSub)
+					inst.Op = ArithmeticOpSub
 				case keywordMul:
-					inst.setOp(ArithmeticOpMul)
+					inst.Op = ArithmeticOpMul
 				case keywordDiv:
-					inst.setOp(ArithmeticOpDiv)
+					inst.Op = ArithmeticOpDiv
 				case keywordRem:
-					inst.setOp(ArithmeticOpRem)
+					inst.Op = ArithmeticOpRem
 				case keywordShiftLeft:
-					inst.setOp(ArithmeticOpShiftLeft)
+					inst.Op = ArithmeticOpShiftLeft
 				case keywordShiftRight:
-					inst.setOp(ArithmeticOpShiftRight)
+					inst.Op = ArithmeticOpShiftRight
 				case keywordAnd:
-					inst.setOp(ArithmeticOpBinaryAnd)
+					inst.Op = ArithmeticOpBinaryAnd
 				case keywordOr:
-					inst.setOp(ArithmeticOpBinaryOr)
+					inst.Op = ArithmeticOpBinaryOr
 				case keywordNot:
-					inst.setOp(ArithmeticOpBinaryNot)
+					inst.Op = ArithmeticOpBinaryNot
 				case keywordXor:
-					inst.setOp(ArithmeticOpBinaryXor)
+					inst.Op = ArithmeticOpBinaryXor
 				default:
 					return fmt.Errorf("Illegal arithmetic operation %s", t.Value)
 				}
@@ -307,7 +318,7 @@ func (this *_parser) parseArithmetic(t *node, nodes []*node) error {
 				if sv1, err := this.resolveRegister(src1); err != nil {
 					return err
 				} else {
-					inst.setByte(3, sv1)
+					inst.Data[2] = sv1
 				}
 			}
 		}
@@ -315,10 +326,163 @@ func (this *_parser) parseArithmetic(t *node, nodes []*node) error {
 		return fmt.Errorf("Too many arguments provided for an arithmetic instruction")
 	}
 	// now setup the code section
-	this.core.code[this.addrs[this.currSegment]] = inst
-	this.addrs[this.currSegment]++
-	return nil
+	return this.installInstruction(inst.Encode())
 }
+func (this *_parser) installInstruction(inst *Instruction) error {
+	if this.currSegment != codeSegment {
+		return fmt.Errorf("Must install instructions to the code segment")
+	} else {
+		this.core.code[this.addrs[this.currSegment]] = *inst
+		this.addrs[this.currSegment]++
+		return nil
+	}
+}
+func (this *_parser) installData(data Word) error {
+	if this.currSegment != dataSegment {
+		return fmt.Errorf("Must install words to the data segment!")
+	} else {
+		this.core.data[this.addrs[this.currSegment]] = data
+		this.addrs[this.currSegment]++
+		return nil
+	}
+}
+func (this nodeType) registerOrAlias() bool {
+	return this == typeRegister || this == typeAlias
+}
+func (this nodeType) immediate() bool {
+	return this == typeHexImmediate || this == typeBinaryImmediate || this == typeImmediate
+}
+func (this nodeType) comment() bool {
+	return this == typeComment
+}
+func (this *_parser) resolveSingleArgMove(i *DecodedInstruction, arg *node) error {
+	if dv, err := this.resolveRegister(arg); err != nil {
+		return err
+	} else {
+		i.Data[0] = dv
+		return nil
+	}
+}
+func (this *_parser) isLabelReference(n *node) bool {
+	if n.Type == typeId {
+		_, ok := this.labels[n.Value.(string)]
+		return ok
+	} else {
+		return false
+	}
+}
+func (this *_parser) resolveLabel(name string) (Word, error) {
+	if v, ok := this.labels[name]; !ok {
+		return 0, fmt.Errorf("Label %s does not exist!", name)
+	} else {
+		return v.addr, nil
+	}
+}
+
+func (this *_parser) parseMove(first *node, rest []*node) error {
+	deferred := false
+	var d DecodedInstruction
+	d.Group = InstructionGroupMove
+	switch len(rest) {
+	case 2:
+		if !rest[1].Type.comment() {
+			return fmt.Errorf("Too many arguments provided to a single argument move operation")
+		}
+		fallthrough
+	case 1:
+		dv := rest[0]
+		switch first.Type {
+		case keywordPop:
+			d.Op = MoveOpPop
+			if err := this.resolveSingleArgMove(&d, dv); err != nil {
+				return err
+			}
+		case keywordPeek:
+			d.Op = MoveOpPeek
+			if err := this.resolveSingleArgMove(&d, dv); err != nil {
+				return err
+			}
+		case keywordPush:
+			if dv.Type.registerOrAlias() {
+				d.Op = MoveOpPush
+				if err := this.resolveSingleArgMove(&d, dv); err != nil {
+					return err
+				}
+			} else if dv.Type.immediate() {
+				d.Op = MoveOpPushImmediate
+				d.SetImmediate(dv.Value.(Word))
+			} else {
+				return fmt.Errorf("Illegal operand type for push operation!")
+			}
+		}
+	case 4:
+		if !rest[3].Type.comment() {
+			return fmt.Errorf("Too many arguments provided to a normal move operation")
+		}
+		fallthrough
+	case 3:
+		if dv, err := this.resolveRegister(rest[0]); err != nil {
+			return err
+		} else if rest[1].Type != typeEquals {
+			return fmt.Errorf("An = is necessary to separate the destination from source of a move operation")
+		} else if src := rest[2]; !src.Type.registerOrAlias() && !src.Type.immediate() && src.Type != typeId {
+			return fmt.Errorf("the source of a move operation can be either a register, alias, immediate, or label")
+		} else {
+			d.Data[0] = dv
+			if src.Type.registerOrAlias() {
+				if sv, err := this.resolveRegister(src); err != nil {
+					return err
+				} else {
+					d.Data[1], d.Data[2] = sv, 0
+				}
+				switch first.Type {
+				case keywordMove:
+					d.Op = MoveOpMove
+				case keywordSwap:
+					d.Op = MoveOpSwap
+				case keywordLoad:
+					d.Op = MoveOpLoad
+				case keywordStore:
+					d.Op = MoveOpStore
+				default:
+					return fmt.Errorf("Illegal move operation %d", first.Type)
+				}
+			} else {
+				if src.Type.immediate() {
+					d.SetImmediate(src.Value.(Word))
+				} else if src.Type == typeId {
+					if v, err := this.resolveLabel(src.Value.(string)); err != nil {
+						// defer it for now
+						deferred = true
+						this.Defer(&d, src)
+					} else {
+						d.SetImmediate(v)
+					}
+				} else {
+					panic(fmt.Sprintf("Programmer Failure: accepted but unhandled node type (%d) in move operation!", src.Type))
+				}
+				switch first.Type {
+				case keywordSet:
+					d.Op = MoveOpSet
+				case keywordLoad:
+					d.Op = MoveOpLoadMem
+				case keywordStore:
+					d.Op = MoveOpStoreImm
+				default:
+					return fmt.Errorf("move op %s doesn't have an immediate form", first.Value.(string))
+				}
+			}
+		}
+	default:
+		return fmt.Errorf("Too few or too many arguments provided to a move operation!")
+	}
+	if !deferred {
+		return this.installInstruction(d.Encode())
+	} else {
+		return nil
+	}
+}
+
 func (this *_parser) parseStatement(stmt *statement) error {
 	// get the first element and perform a correct dispatch
 	first, err := stmt.First()
@@ -338,19 +502,21 @@ func (this *_parser) parseStatement(stmt *statement) error {
 			return err
 		} else if len(rest) > 0 {
 			// if there are more entries on the line then check them out
-			s := statement(rest)
+			var s statement
+			s.index = stmt.index
+			s.contents = rest
 			return this.parseStatement(&s)
 		} else {
 			return nil
 		}
 	case keywordAdd, keywordSub, keywordMul, keywordDiv, keywordRem, keywordShiftLeft, keywordShiftRight, keywordAnd, keywordOr, keywordNot, keywordXor, keywordIncrement, keywordDecrement, keywordHalve:
 		return this.parseArithmetic(first, rest)
+	case keywordMove, keywordSet, keywordSwap, keywordLoad, keywordStore:
+		return this.parseMove(first, rest)
+	//case keywordEqual, keywordNotEqual, keywordLessThan, keywordGreaterThan, keywordLessThanOrEqualTo, keywordGreaterThanOrEqualTo:
+	//	return this.parseCompare(first, rest)
 	//case keywordBranch, keywordIf0, keywordIf1:
 	//	return this.parseBranch(first.Type, rest)
-	//case keywordEqual, keywordNotEqual, keywordLessThan, keywordGreaterThan, keywordLessThanOrEqualTo, keywordGreaterThanOrEqualTo:
-	//	return this.parseCompare(first.Type, rest)
-	//case keywordMove, keywordSet, keywordSwap, keywordLoad, keywordStore:
-	//	return this.parseMove(first.Type, rest)
 	//case keywordSystem:
 	//	return this.parseMisc(first.Type, rest)
 	case typeDirectiveAlias:
@@ -372,7 +538,7 @@ func (this *_parser) parseStatement(stmt *statement) error {
 		return fmt.Errorf("Can't start a line with a comma")
 	case typeEquals:
 		return fmt.Errorf("Can't start a line with a equals sign")
-	case typeUnknown:
+	case typeId:
 		return fmt.Errorf("Unknown node %s", first.Value)
 	default:
 		return fmt.Errorf("Unhandled nodeType %d: %s", first.Type, first.Value)
@@ -383,7 +549,19 @@ func (this *_parser) Process() error {
 	// build up labels and alias listings
 	for _, stmt := range this.statements {
 		if err := this.parseStatement(&stmt); err != nil {
+			return fmt.Errorf("Error: line %d: msg: %s", stmt.index, err)
+		}
+	}
+	// check the deferred labels now that we are done processing the whole file
+	for _, d := range this.deferredInstructions {
+		str := d.trouble.Value.(string)
+		if v, err := this.resolveLabel(str); err != nil {
 			return err
+		} else {
+			q := d.inst
+			q.SetImmediate(v)
+			z := q.Encode()
+			this.core.code[d.addr] = *z
 		}
 	}
 	return nil
@@ -392,8 +570,10 @@ func (this *_parser) Process() error {
 func (this *_parser) Parse(lines <-chan parser.Entry) error {
 	for line := range lines {
 		stmt := carveLine(line.Line)
+		stmt.index = line.Index
 		this.statements = append(this.statements, stmt)
-		for _, str := range stmt {
+		fmt.Printf("%d:", stmt.index)
+		for _, str := range stmt.contents {
 			if err := str.Parse(); err != nil {
 				return fmt.Errorf("Error: line: %d : %s\n", line.Index, err)
 			}
@@ -407,7 +587,7 @@ func (this *_parser) Parse(lines <-chan parser.Entry) error {
 type nodeType int
 
 const (
-	typeUnknown nodeType = iota
+	typeId nodeType = iota
 	typeEquals
 	typeComma
 	typeLabel
@@ -418,6 +598,9 @@ const (
 	typeComment
 	typeSymbol
 	typeAlias
+	typeAnd
+	typeOr
+	typeXor
 	// directives
 	typeDirective
 	typeDirectiveData
@@ -432,6 +615,9 @@ const (
 	keywordLoad
 	keywordStore
 	keywordSwap
+	keywordPush
+	keywordPop
+	keywordPeek
 	// branch words
 	keywordBranch
 	keywordIf0
@@ -465,6 +651,45 @@ const (
 	// misc words
 	keywordSystem
 )
+
+var compareTable = map[nodeType]map[nodeType]byte{
+	keywordEqual: map[nodeType]byte{
+		typeEquals: CompareOpEq,
+		typeAnd:    CompareOpEqAnd,
+		typeOr:     CompareOpEqOr,
+		typeXor:    CompareOpEqXor,
+	},
+	keywordNotEqual: map[nodeType]byte{
+		typeEquals: CompareOpNeq,
+		typeAnd:    CompareOpNeqAnd,
+		typeOr:     CompareOpNeqOr,
+		typeXor:    CompareOpNeqXor,
+	},
+	keywordLessThan: map[nodeType]byte{
+		typeEquals: CompareOpLessThan,
+		typeAnd:    CompareOpLessThanAnd,
+		typeOr:     CompareOpLessThanOr,
+		typeXor:    CompareOpLessThanXor,
+	},
+	keywordGreaterThan: map[nodeType]byte{
+		typeEquals: CompareOpGreaterThan,
+		typeAnd:    CompareOpGreaterThanAnd,
+		typeOr:     CompareOpGreaterThanOr,
+		typeXor:    CompareOpGreaterThanXor,
+	},
+	keywordLessThanOrEqualTo: map[nodeType]byte{
+		typeEquals: CompareOpLessThanOrEqualTo,
+		typeAnd:    CompareOpLessThanOrEqualToAnd,
+		typeOr:     CompareOpLessThanOrEqualToOr,
+		typeXor:    CompareOpLessThanOrEqualToXor,
+	},
+	keywordGreaterThanOrEqualTo: map[nodeType]byte{
+		typeEquals: CompareOpGreaterThanOrEqualTo,
+		typeAnd:    CompareOpGreaterThanOrEqualToAnd,
+		typeOr:     CompareOpGreaterThanOrEqualToOr,
+		typeXor:    CompareOpGreaterThanOrEqualToXor,
+	},
+}
 
 type node struct {
 	Value interface{}
@@ -507,7 +732,7 @@ func (this *node) parseLabel(val string) error {
 		this.Type = typeLabel
 		this.Value = nVal
 		// now parse the label as a entirely new node and see if we get a register back
-		nod := node{Value: this.Value, Type: typeUnknown}
+		nod := node{Value: this.Value, Type: typeId}
 		if err := nod.Parse(); err != nil {
 			switch err.(type) {
 			case *strconv.NumError:
@@ -630,7 +855,7 @@ func (this *node) parseGeneric(str string) error {
 	return nil
 }
 func (this *node) Parse() error {
-	if this.Type == typeUnknown {
+	if this.Type == typeId {
 		val := this.Value.(string)
 		if val == "=" {
 			this.Type = typeEquals
@@ -667,34 +892,37 @@ func (this *node) IsLabel() bool {
 	return this.Type == typeLabel
 }
 
-type statement []*node
+type statement struct {
+	contents []*node
+	index    int
+}
 
 func (this *statement) Add(value string, t nodeType) {
 	// always trim before adding
 	str := strings.TrimSpace(value)
 	if len(str) > 0 {
-		*this = append(*this, &node{Value: str, Type: t})
+		this.contents = append(this.contents, &node{Value: str, Type: t})
 	}
 }
 func (this *statement) AddUnknown(value string) {
-	this.Add(value, typeUnknown)
+	this.Add(value, typeId)
 }
 func (this *statement) String() string {
-	var str string
-	for _, n := range *this {
+	str := fmt.Sprintf("%d: ", this.index)
+	for _, n := range this.contents {
 		str += fmt.Sprintf(" %T: %s ", n, *n)
 	}
 	return str
 }
 func (this *statement) First() (*node, error) {
-	if len(*this) == 0 {
+	if len(this.contents) == 0 {
 		return nil, fmt.Errorf("Empty statement!")
 	} else {
-		return (*this)[0], nil
+		return this.contents[0], nil
 	}
 }
 func (this *statement) Rest() []*node {
-	return (*this)[1:]
+	return this.contents[1:]
 }
 
 func carveLine(line string) statement {
@@ -709,10 +937,23 @@ func carveLine(line string) statement {
 	// skip the strings at the beginning
 	for width := 0; start < len(data); start += width {
 		var r rune
-		r, width = utf8.DecodeRuneInString(data[start:])
+		next := data[start:]
+		r, width = utf8.DecodeRuneInString(next)
 		if unicode.IsSpace(r) {
 			s.AddUnknown(data[oldStart:start])
 			oldStart = start
+		} else if r == '&' {
+			s.AddUnknown(data[oldStart:start])
+			s.Add("&", typeAnd)
+			oldStart = start + width
+		} else if r == '|' {
+			s.AddUnknown(data[oldStart:start])
+			s.Add("|", typeOr)
+			oldStart = start + width
+		} else if r == '^' {
+			s.AddUnknown(data[oldStart:start])
+			s.Add("^", typeXor)
+			oldStart = start + width
 		} else if r == '=' {
 			s.AddUnknown(data[oldStart:start])
 			s.Add("=", typeEquals)
