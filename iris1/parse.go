@@ -568,6 +568,59 @@ func (this *_parser) parseCompare(first *node, rest []*node) error {
 	}
 	return this.installInstruction(d.Encode())
 }
+func (this nodeType) isComma() bool {
+	return this == typeComma
+}
+func (this *_parser) parseSystem(d *DecodedInstruction, rest []*node) error {
+	switch len(rest) {
+	case 0, 1, 2, 3, 4:
+		return fmt.Errorf("Too few arguments passed to the given system operation")
+	case 6:
+		if rest[5].Type != typeComment {
+			return fmt.Errorf("Too many arguments passed to the system operation")
+		}
+		fallthrough
+	case 5:
+		if id := rest[0]; !id.Type.immediate() {
+			return fmt.Errorf("First argument of a system must be an 8-bit immediate")
+		} else if idx := id.Value.(Word); idx > 255 {
+			return fmt.Errorf("Provided system operation immediate is larger than 7-bits!")
+		} else if !rest[1].Type.isComma() {
+			return fmt.Errorf("Comma is required after immediate in system operation")
+		} else if sv0 := rest[2]; !sv0.Type.registerOrAlias() {
+			return fmt.Errorf("Second argument in system operation must be a register or alias")
+		} else if s0, err := this.resolveRegister(sv0); err != nil {
+			return err
+		} else if !rest[3].Type.isComma() {
+			return fmt.Errorf("second and third arguments in a system operation must be separated by a comma")
+		} else if sv1 := rest[2]; !sv1.Type.registerOrAlias() {
+			return fmt.Errorf("Third argument in system operation must be a register or alias")
+		} else if s1, err := this.resolveRegister(sv1); err != nil {
+			return err
+		} else {
+			d.Data = [3]byte{byte(idx), s0, s1}
+		}
+	default:
+		return fmt.Errorf("too many arguments passed to the given system operation")
+	}
+	return nil
+}
+func (this *_parser) parseMisc(first *node, rest []*node) error {
+	if this.currSegment != codeSegment {
+		return fmt.Errorf("Currently not in code segment, can't insert instruction")
+	}
+	var d DecodedInstruction
+	d.Group = InstructionGroupMisc
+	switch first.Type {
+	case keywordSystem:
+		if err := this.parseSystem(&d, rest); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("Illegal misc operation %s", first.Value)
+	}
+	return this.installInstruction(d.Encode())
+}
 
 func (this *_parser) parseStatement(stmt *statement) error {
 	// get the first element and perform a correct dispatch
@@ -601,10 +654,10 @@ func (this *_parser) parseStatement(stmt *statement) error {
 		return this.parseMove(first, rest)
 	case keywordEqual, keywordNotEqual, keywordLessThan, keywordGreaterThan, keywordLessThanOrEqualTo, keywordGreaterThanOrEqualTo:
 		return this.parseCompare(first, rest)
+	case keywordSystem:
+		return this.parseMisc(first, rest)
 	//case keywordBranch, keywordIf0, keywordIf1:
 	//	return this.parseBranch(first.Type, rest)
-	//case keywordSystem:
-	//	return this.parseMisc(first.Type, rest)
 	case typeDirectiveAlias:
 		// go through the rest of the nodes
 		return this.parseAlias(rest)
