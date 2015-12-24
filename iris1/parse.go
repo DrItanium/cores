@@ -901,6 +901,7 @@ func (this *_parser) parseCompare(first *node, rest []*node) error {
 	return this.installInstruction(d.Encode())
 }
 func (this *_parser) parseSystem(d *DecodedInstruction, rest []*node) error {
+	d.Op = MiscOpSystemCall
 	switch len(rest) {
 	case 0, 1, 2, 3, 4:
 		return fmt.Errorf("Too few arguments passed to the given system operation")
@@ -1088,6 +1089,7 @@ func (this *_parser) parseJump(first *node, rest []*node) error {
 		return fmt.Errorf("Currently not in code segment, can't insert instruction")
 	}
 	var bb branchBits
+
 	var deferred bool
 	var d DecodedInstruction
 	d.Group = InstructionGroupJump
@@ -1175,7 +1177,7 @@ func (this *_parser) parseJump(first *node, rest []*node) error {
 			} else if p, err := this.resolveRegister(pred); err != nil {
 				return err
 			} else {
-				bb.setImmediateForm(dest.Type.immediate())
+				bb.setImmediateForm(dest.Type.immediate() || dest.Type == typeId)
 				d.Data[0] = p
 				// now check out the destination and see if it needs to be deferred or not
 				if dest.Type.registerOrAlias() {
@@ -1199,11 +1201,45 @@ func (this *_parser) parseJump(first *node, rest []*node) error {
 					panic(fmt.Sprintf("Programmer Failure: accepted but unhandled node type (%s) in jump operation!", dest.Value))
 				}
 			}
+		case 2:
+			if !rest[1].Type.comment() {
+				return fmt.Errorf("Too many arguments provided to the given jump op")
+			}
+			fallthrough
+		case 1:
+			bb.setIfThenElseForm(false)
+			bb.setConditionalForm(false)
+			if dest := rest[0]; !dest.Type.registerOrAlias() && !dest.Type.immediate() && dest.Type != typeId {
+				return fmt.Errorf("Expected a register, alias, immediate, or label as the first argument to the given unconditional branch/call")
+			} else {
+				bb.setImmediateForm(dest.Type.immediate() || dest.Type == typeId)
+				if dest.Type.registerOrAlias() {
+					if q, err := this.resolveRegister(dest); err != nil {
+						return err
+					} else {
+						d.Data[0] = q
+					}
+				} else if dest.Type.immediate() {
+					d.SetImmediate(dest.Value.(Word))
+				} else {
+					if v, err := this.resolveLabel(dest.Value.(string)); err != nil {
+						// defer it for now
+						deferred = true
+						this.Defer(&d, dest)
+					} else {
+						d.SetImmediate(v)
+					}
+				}
+			}
+		case 0:
+			return fmt.Errorf("No arguments provided to given branch/call")
+		default:
+			return fmt.Errorf("Too many arguments provided to this jump op")
 		}
 	default:
 		return fmt.Errorf("Illegal jump operation %s", first.Value)
 	}
-	d.Group = byte(bb)
+	d.Op = byte(bb)
 	if deferred {
 		return nil
 	} else {

@@ -41,7 +41,6 @@ const (
 	InstructionPointer
 	StackPointer
 	PredicateRegister
-	CountRegister
 	CallPointer
 	UserRegisterBegin
 )
@@ -216,7 +215,6 @@ type Core struct {
 	instructionPointer Word
 	stackPointer       Word
 	callPointer        Word
-	count              Word
 	predicate          Word
 	advancePc          bool
 	terminateExecution bool
@@ -236,8 +234,6 @@ func (this *Core) SetRegister(index byte, value Word) error {
 		this.stackPointer = value
 	case PredicateRegister:
 		this.predicate = value
-	case CountRegister:
-		this.count = value
 	case CallPointer:
 		this.callPointer = value
 	default:
@@ -257,8 +253,6 @@ func (this *Core) Register(index byte) Word {
 		return this.stackPointer
 	case PredicateRegister:
 		return this.predicate
-	case CountRegister:
-		return this.count
 	case CallPointer:
 		return this.callPointer
 	default:
@@ -321,17 +315,11 @@ func New() (*Core, error) {
 	c.terminateExecution = false
 	if err := c.SetRegister(InstructionPointer, 0); err != nil {
 		return nil, err
-	}
-	if err := c.SetRegister(PredicateRegister, 0); err != nil {
+	} else if err := c.SetRegister(PredicateRegister, 0); err != nil {
 		return nil, err
-	}
-	if err := c.SetRegister(StackPointer, 0xFFFF); err != nil {
+	} else if err := c.SetRegister(StackPointer, 0xFFFF); err != nil {
 		return nil, err
-	}
-	if err := c.SetRegister(CallPointer, 0xFFFF); err != nil {
-		return nil, err
-	}
-	if err := c.SetRegister(CountRegister, 0); err != nil {
+	} else if err := c.SetRegister(CallPointer, 0xFFFF); err != nil {
 		return nil, err
 	}
 	for i := 0; i < MajorOperationGroupCount; i++ {

@@ -85,30 +85,12 @@ func (this *branchBits) setIfThenElseForm(value bool) {
 }
 
 func branch(core *Core, addr Word, call bool) error {
+	core.advancePc = false
 	if call {
 		return core.Call(addr)
 	} else {
 		return core.SetRegister(InstructionPointer, addr)
 	}
-}
-func selectNextAddress(core *Core, cond bool, onTrue, onFalse Word, call bool) error {
-	core.advancePc = false
-	var next Word
-	if cond {
-		next = onTrue
-	} else {
-		next = onFalse
-	}
-	return branch(core, next, call)
-}
-func conditionalJump(core *Core, cond bool, onTrue Word, call bool) error {
-	return selectNextAddress(core, cond, onTrue, core.Register(InstructionPointer)+1, call)
-}
-func unconditionalJump(core *Core, addr Word, call bool) error {
-	return branch(core, addr, call)
-}
-func undefinedJumpFunction(_ *Core, _ *DecodedInstruction) error {
-	return fmt.Errorf("Illegal jump operation!")
 }
 func uncondOp(core *Core, call, ret, imm bool, inst *DecodedInstruction) error {
 	var addr Word
