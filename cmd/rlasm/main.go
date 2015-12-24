@@ -13,7 +13,7 @@ import (
 
 var target = flag.String("target", "", "target backend (required)")
 var input = flag.String("input", "", "input file to be processed (leave blank for stdin)")
-var output = flag.String("output", "", "output file (leave blank for stdout")
+var output = flag.String("output", "", "output file (leave blank for stdout)")
 var listTargets = flag.Bool("list-targets", false, "display registered targets and exit")
 var debug = flag.Bool("debug", false, "enable debug")
 
@@ -70,7 +70,7 @@ func main() {
 			fmt.Println(err)
 			return
 		} else {
-			c, e, e2, e3, b := make(chan parser.Entry), make(chan error), make(chan error), make(chan error), make(chan byte)
+			c, e, e2, e3, b := make(chan parser.Entry, 1024), make(chan error), make(chan error), make(chan error), make(chan byte, 512)
 			// scanner goroutine
 			go func(scanner *bufio.Scanner, c chan parser.Entry, e chan error) {
 				for count := 0; scanner.Scan(); count++ {
