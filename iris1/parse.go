@@ -621,6 +621,28 @@ func (this *_parser) parseMisc(first *node, rest []*node) error {
 	}
 	return this.installInstruction(d.Encode())
 }
+func (this *_parser) parseIfThenElse(d *DecodedInstruction, first *node, rest []*node) error {
+	return nil
+}
+func (this *_parser) parseBranch(d *DecodedInstruction, rest []*node) error {
+	return nil
+}
+func (this *_parser) parseJump(first *node, rest []*node) error {
+	if this.currSegment != codeSegment {
+		return fmt.Errorf("Currently not in code segment, can't insert instruction")
+	}
+	var d DecodedInstruction
+	d.Group = InstructionGroupJump
+	switch first.Type {
+	case keywordIf0, keywordIf1:
+		return this.parseIfThenElse(&d, first, rest)
+	case keywordBranch:
+		return this.parseBranch(&d, rest)
+	default:
+		return fmt.Errorf("Illegal jump operation %s", first.Value)
+	}
+	return this.installInstruction(d.Encode())
+}
 
 func (this *_parser) parseStatement(stmt *statement) error {
 	// get the first element and perform a correct dispatch
@@ -656,8 +678,8 @@ func (this *_parser) parseStatement(stmt *statement) error {
 		return this.parseCompare(first, rest)
 	case keywordSystem:
 		return this.parseMisc(first, rest)
-	//case keywordBranch, keywordIf0, keywordIf1:
-	//	return this.parseBranch(first.Type, rest)
+	case keywordBranch, keywordIf0, keywordIf1:
+		return this.parseJump(first, rest)
 	case typeDirectiveAlias:
 		// go through the rest of the nodes
 		return this.parseAlias(rest)
