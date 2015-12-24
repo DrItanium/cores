@@ -620,14 +620,11 @@ func (this *_parser) Parse(lines <-chan parser.Entry) error {
 		stmt := carveLine(line.Line)
 		stmt.index = line.Index
 		this.statements = append(this.statements, stmt)
-		fmt.Printf("%d:", stmt.index)
 		for _, str := range stmt.contents {
 			if err := str.Parse(); err != nil {
 				return fmt.Errorf("Error: line: %d : %s\n", line.Index, err)
 			}
-			fmt.Print("\t", str, " ")
 		}
-		fmt.Println()
 	}
 	return nil
 }

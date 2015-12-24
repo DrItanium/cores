@@ -15,6 +15,7 @@ var target = flag.String("target", "", "target backend (required)")
 var input = flag.String("input", "", "input file to be processed (leave blank for stdin)")
 var output = flag.String("output", "", "output file (leave blank for stdout")
 var listTargets = flag.Bool("list-targets", false, "display registered targets and exit")
+var debug = flag.Bool("debug", false, "enable debug")
 
 func init() {
 	registration.Register()
@@ -89,10 +90,20 @@ func main() {
 			}(scanner, c, e)
 			// output goroutine
 			go func(c chan byte, e chan error, o *os.File) {
-				w := bufio.NewWriter(o)
-				for v := range c {
-					w.WriteByte(v)
+				q := bufio.NewWriter(o)
+				if *debug {
+					var count int
+					for v := range c {
+						q.WriteByte(v)
+						count++
+					}
+					fmt.Println("Wrote", count, "bytes")
+				} else {
+					for v := range c {
+						q.WriteByte(v)
+					}
 				}
+				q.Flush()
 				e <- nil
 			}(b, e3, o)
 			// parse process goroutine

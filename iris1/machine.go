@@ -497,9 +497,9 @@ const (
 
 func readWord(input <-chan byte) (Word, error) {
 	if value, more := <-input; !more {
-		return 0, fmt.Errorf("Closed stream")
+		return 0, fmt.Errorf("Closed stream 0")
 	} else if value1, more0 := <-input; !more0 {
-		return 0, fmt.Errorf("Closed stream")
+		return 0, fmt.Errorf("Closed stream 1")
 	} else {
 		return Word(binary.LittleEndian.Uint16([]byte{value, value1})), nil
 	}
@@ -520,14 +520,14 @@ func readInstruction(input <-chan byte) (Instruction, error) {
 
 }
 func (this *Core) InstallProgram(input <-chan byte) error {
-	for i := 0; i < instructionMemorySize; i++ {
+	for i := 0; i < MemorySize; i++ {
 		if inst, err := readInstruction(input); err != nil {
 			return err
 		} else {
 			this.code[i] = inst
 		}
 	}
-	for i := 0; i < dataMemorySize; i++ {
+	for i := 0; i < MemorySize; i++ {
 		if inst, err := readWord(input); err != nil {
 			return err
 		} else {
@@ -539,14 +539,14 @@ func (this *Core) InstallProgram(input <-chan byte) error {
 
 func (this *Core) Dump(output chan<- byte) error {
 	inst, word := make([]byte, 4), make([]byte, 2)
-	for i := 0; i < instructionMemorySize; i++ {
-		binary.LittleEndian.PutUint32(inst, uint32(this.code[i]))
+	for _, dat := range this.code {
+		binary.LittleEndian.PutUint32(inst, uint32(dat))
 		for _, v := range inst {
 			output <- v
 		}
 	}
-	for i := 0; i < dataMemorySize; i++ {
-		binary.LittleEndian.PutUint16(word, uint16(this.data[i]))
+	for _, dat := range this.data {
+		binary.LittleEndian.PutUint16(word, uint16(dat))
 		for _, v := range word {
 			output <- v
 		}
