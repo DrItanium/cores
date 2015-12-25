@@ -1,5 +1,9 @@
 package iris1
 
+import (
+	"fmt"
+)
+
 const (
 	// System commands
 	SystemCallTerminate = iota
