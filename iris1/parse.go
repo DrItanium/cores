@@ -290,13 +290,19 @@ var keywords = map[string]nodeType{
 func (this *node) parseGeneric(str string) error {
 	if v, ok := keywords[str]; ok {
 		this.Type = v
+		return nil
+	} else {
+		return fmt.Errorf("Unknown statment %s", str)
 	}
-	return nil
 }
 func (this *node) Parse() error {
 	if this.Type == typeId {
 		val := this.Value.(string)
-		if val == "=" {
+		if this.parseGeneric(val) == nil {
+			// parse keywords first and then other types of symbols
+			// successful match....kinda a hack but it will work
+			return nil
+		} else if val == "=" {
 			this.Type = typeEquals
 		} else if val == "," {
 			this.Type = typeComma
@@ -317,9 +323,8 @@ func (this *node) Parse() error {
 			return this.parseDirective(val)
 		} else if strings.HasPrefix(val, "?") {
 			return this.parseAlias(val)
-		} else {
-			return this.parseGeneric(val)
 		}
+		// leave it typeId since that is legal as well
 	}
 	return nil
 }
