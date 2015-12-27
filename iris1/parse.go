@@ -692,13 +692,11 @@ func (this *_parser) parseStatement(stmt *statement) error {
 		// go through the rest of the nodes
 		return this.parseAlias(rest)
 	case typeDirectiveCode:
-		if err := this.setSegment(rest, codeSegment, "code"); err != nil {
-			return err
-		}
+		return this.setSegment(rest, codeSegment, "code")
 	case typeDirectiveData:
-		if err := this.setSegment(rest, dataSegment, "data"); err != nil {
-			return err
-		}
+		return this.setSegment(rest, dataSegment, "data")
+	case typeDirectiveMicrocode:
+		return this.setSegment(rest, microcodeSegment, "microcode")
 	case typeDirectiveOrg:
 		return this.setPosition(rest)
 	case typeDirectiveWord:
