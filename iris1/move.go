@@ -87,6 +87,10 @@ func load(core *Core, inst *DecodedInstruction) error {
 		val = core.DataMemory(addr)
 	case microcodeSegment:
 		val = core.MicrocodeMemory(addr)
+	case stackSegment:
+		val = core.StackMemory(addr)
+	case callSegment:
+		val = core.CallMemory(addr)
 	case codeSegment:
 		return fmt.Errorf("Can't load from the code segment!")
 	default:
@@ -102,6 +106,10 @@ func store(core *Core, inst *DecodedInstruction) error {
 		return core.SetDataMemory(core.Register(dest), src)
 	case microcodeSegment:
 		return core.SetMicrocodeMemory(core.Register(dest), src)
+	case stackSegment:
+		return core.SetStackMemory(core.Register(dest), src)
+	case callSegment:
+		return core.SetCallMemory(core.Register(dest), src)
 	case codeSegment:
 		return fmt.Errorf("Can't write to code memory!")
 	default:

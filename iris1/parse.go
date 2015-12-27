@@ -1,7 +1,6 @@
 package iris1
 
 import (
-	"encoding/binary"
 	"fmt"
 	"github.com/DrItanium/cores/registration/parser"
 	"strconv"
@@ -73,6 +72,8 @@ const (
 	typeDirectiveWord
 	typeDirectiveAlias
 	typeDirectiveMicrocode
+	typeDirectiveCall
+	typeDirectiveStack
 	// keywords
 	// memory words
 	keywordSet
@@ -226,6 +227,8 @@ var directives = map[string]nodeType{
 	"word":      typeDirectiveWord,
 	"alias":     typeDirectiveAlias,
 	"microcode": typeDirectiveMicrocode,
+	"stack":     typeDirectiveStack,
+	"call":      typeDirectiveCall,
 }
 
 func (this *node) parseDirective(val string) error {
@@ -452,26 +455,7 @@ func (this *_parser) Defer(inst *DecodedInstruction, trouble *node) {
 }
 
 func (this *_parser) Dump(pipe chan<- byte) error {
-	c, d := make([]byte, 4), make([]byte, 2)
-	for _, val := range this.core.code {
-		binary.LittleEndian.PutUint32(c, uint32(val))
-		for _, b := range c {
-			pipe <- b
-		}
-	}
-	for _, val := range this.core.data {
-		binary.LittleEndian.PutUint16(d, uint16(val))
-		for _, b := range d {
-			pipe <- b
-		}
-	}
-	for _, val := range this.core.ucode {
-		binary.LittleEndian.PutUint16(d, uint16(val))
-		for _, b := range d {
-			pipe <- b
-		}
-	}
-	return nil
+	return this.core.Dump(pipe)
 }
 func (this *_parser) parseAlias(nodes []*node) error {
 	if len(nodes) == 0 {
@@ -548,6 +532,10 @@ func (this *_parser) setData(nodes []*node) error {
 				this.core.data[t] = val
 			case microcodeSegment:
 				this.core.ucode[t] = val
+			case callSegment:
+				this.core.call[t] = val
+			case stackSegment:
+				this.core.stack[t] = val
 			}
 		case typeLabel:
 			this.indirectAddresses = append(this.indirectAddresses, indirectAddress{label: addr.Value.(string), seg: this.currSegment, address: this.addrs[this.currSegment]})
@@ -703,6 +691,10 @@ func (this *_parser) parseStatement(stmt *statement) error {
 		return this.setSegment(rest, dataSegment, "data")
 	case typeDirectiveMicrocode:
 		return this.setSegment(rest, microcodeSegment, "microcode")
+	case typeDirectiveCall:
+		return this.setSegment(rest, callSegment, "call")
+	case typeDirectiveStack:
+		return this.setSegment(rest, stackSegment, "stack")
 	case typeDirectiveOrg:
 		return this.setPosition(rest)
 	case typeDirectiveWord:
@@ -723,6 +715,8 @@ var segments = map[string]segment{
 	"code":      codeSegment,
 	"data":      dataSegment,
 	"microcode": microcodeSegment,
+	"stack":     stackSegment,
+	"call":      callSegment,
 }
 
 func translateSegment(str string) (segment, error) {

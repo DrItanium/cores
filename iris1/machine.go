@@ -515,6 +515,20 @@ func (this *Core) InstallProgram(input <-chan byte) error {
 			this.ucode[i] = inst
 		}
 	}
+	for i := 0; i < MemorySize; i++ {
+		if inst, err := readWord(input); err != nil {
+			return err
+		} else {
+			this.stack[i] = inst
+		}
+	}
+	for i := 0; i < MemorySize; i++ {
+		if inst, err := readWord(input); err != nil {
+			return err
+		} else {
+			this.call[i] = inst
+		}
+	}
 	return nil
 }
 
@@ -536,6 +550,18 @@ func (this *Core) Dump(output chan<- byte) error {
 		binary.LittleEndian.PutUint16(word, uint16(dat))
 		for _, v := range word {
 			output <- v
+		}
+	}
+	for _, val := range this.stack {
+		binary.LittleEndian.PutUint16(word, uint16(val))
+		for _, b := range word {
+			output <- b
+		}
+	}
+	for _, val := range this.call {
+		binary.LittleEndian.PutUint16(word, uint16(val))
+		for _, b := range word {
+			output <- b
 		}
 	}
 	return nil
@@ -569,4 +595,21 @@ func (this segment) acceptsDwords() bool {
 }
 func (this segment) acceptsWords() bool {
 	return this == dataSegment || this == microcodeSegment || this == stackSegment || this == callSegment
+}
+
+func (this *Core) StackMemory(address Word) Word {
+	return this.ucode[address]
+}
+
+func (this *Core) SetStackMemory(address, value Word) error {
+	this.stack[address] = value
+	return nil
+}
+func (this *Core) CallMemory(address Word) Word {
+	return this.ucode[address]
+}
+
+func (this *Core) SetCallMemory(address, value Word) error {
+	this.call[address] = value
+	return nil
 }
