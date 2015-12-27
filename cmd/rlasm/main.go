@@ -22,25 +22,36 @@ func init() {
 }
 
 func listRegisteredTargets() {
-	fmt.Println("Supported targets: ")
+	fmt.Fprintln(os.Stderr, "Supported targets: ")
 	for _, val := range parser.GetRegistered() {
-		fmt.Println("\t - ", val)
+		fmt.Fprintln(os.Stderr, "\t - ", val)
 	}
 }
 func main() {
+	// add a layer of indirection to make sure that all of the files are correctly close on an os.Exit call
+	if listTargets, listUsage, err, code := body(); err != nil {
+		if listUsage {
+			flag.Usage()
+		}
+		if listTargets {
+			listRegisteredTargets()
+		}
+		if str := err.Error(); len(str) > 0 {
+			fmt.Fprintln(os.Stderr, str)
+		}
+		os.Exit(code)
+	}
+}
+func body() (bool, bool, error, int) {
+	// list targets, list usage, error message
 	flag.Parse()
 	if *listTargets {
-		listRegisteredTargets()
-		return
+		return true, false, fmt.Errorf(""), 1
 	}
 	if *target == "" {
-		fmt.Println("Did not specify target backend")
-		flag.Usage()
-		listRegisteredTargets()
+		return true, true, fmt.Errorf("Did not specify a target backend"), 2
 	} else if !parser.IsRegistered(*target) {
-		fmt.Println("%s is not a registered target backend!", *target)
-		flag.Usage()
-		listRegisteredTargets()
+		return true, true, fmt.Errorf("%s is not a registered target backend!", *target), 3
 	} else {
 		var scanner *bufio.Scanner
 		var o *os.File
@@ -48,8 +59,7 @@ func main() {
 			scanner = bufio.NewScanner(os.Stdin)
 		} else {
 			if file, err := os.Open(*input); err != nil {
-				fmt.Println(err)
-				return
+				return false, false, err, 4
 			} else {
 				defer file.Close()
 				scanner = bufio.NewScanner(file)
@@ -59,16 +69,14 @@ func main() {
 			o = os.Stdout
 		} else {
 			if file, err := os.Create(*output); err != nil {
-				fmt.Println(err)
-				return
+				return false, false, err, 5
 			} else {
 				defer file.Close()
 				o = file
 			}
 		}
 		if p, err := parser.New(*target); err != nil {
-			fmt.Println(err)
-			return
+			return false, false, err, 6
 		} else {
 			c, e, e2, e3, b := make(chan parser.Entry, 1024), make(chan error), make(chan error), make(chan error), make(chan byte, 512)
 			// scanner goroutine
@@ -105,7 +113,7 @@ func main() {
 				}
 				q.Flush()
 				e <- nil
-			}(b, e3, o)
+			}(b, e2, o)
 			// parse process goroutine
 			go func(c chan parser.Entry, e chan error, o chan byte, p parser.Parser) {
 				if err := p.Parse(c); err != nil {
@@ -118,26 +126,24 @@ func main() {
 					e <- nil
 				}
 				close(o)
-			}(c, e, b, p)
+			}(c, e3, b, p)
 			for i := 0; i < 3; i++ {
 				select {
 				case err := <-e:
 					if err != nil {
-						fmt.Println(err)
-						return
+						return false, false, err, 7
 					}
 				case err := <-e2:
 					if err != nil {
-						fmt.Println(err)
-						return
+						return false, false, err, 8
 					}
 				case err := <-e3:
 					if err != nil {
-						fmt.Println(err)
-						return
+						return false, false, err, 9
 					}
 				}
 			}
 		}
+		return false, false, nil, 0
 	}
 }

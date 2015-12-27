@@ -20,45 +20,51 @@ func init() {
 	registration.Register()
 }
 func listRegisteredTargets() {
-	fmt.Println("Supported targets: ")
+	fmt.Fprintln(os.Stderr, "Supported targets: ")
 	for _, val := range machine.GetRegistered() {
-		fmt.Println("\t - ", val)
+		fmt.Fprintln(os.Stderr, "\t - ", val)
 	}
 }
 func main() {
+	if listTargets, listUsage, err, code := body(); err != nil {
+		if listUsage {
+			flag.Usage()
+		}
+		if listTargets {
+			listRegisteredTargets()
+		}
+		if str := err.Error(); len(str) > 0 {
+			fmt.Fprintln(os.Stderr, str)
+		}
+		os.Exit(code)
+	}
+}
+func body() (bool, bool, error, int) {
 	flag.Parse()
 	if *listTargets {
-		listRegisteredTargets()
-		return
+		return true, false, fmt.Errorf(""), 1
 	}
 	if *target == "" {
-		fmt.Println("No target backend specified")
-		flag.Usage()
-		listRegisteredTargets()
-		return
+		return true, true, fmt.Errorf("No target backend specified"), 2
 	} else if !machine.IsRegistered(*target) {
-		fmt.Printf("Specified target %s is not a supported target!\n", *target)
-		listRegisteredTargets()
-		return
+		return true, false, fmt.Errorf("Specified target %s is not a supported target!", *target), 3
 	} else {
 		var o *os.File
 		if *input == "" {
 			o = os.Stdin
 		} else {
 			if file, err := os.Open(*input); err != nil {
-				fmt.Println(err)
-				return
+				return false, false, err, 4
 			} else {
 				defer file.Close()
 				o = file
 			}
 		}
 		if mach, err0 := machine.New(*target); err0 != nil {
-			fmt.Println(err0)
+			return false, false, err0, 5
 		} else {
 			// install the program
-			done := make(chan error)
-			done2 := make(chan error)
+			done, done2 := make(chan error), make(chan error)
 			data := make(chan byte, 1024)
 
 			loadMemoryImage(o, done, data)
@@ -69,21 +75,20 @@ func main() {
 				select {
 				case err := <-done:
 					if err != nil {
-						fmt.Printf("Error from rlasm: %s\n", err)
-						return
+						return false, false, fmt.Errorf("Error from rlasm: %s", err), 6
 					}
 				case err := <-done2:
 					if err != nil {
-						fmt.Printf("Error from %s machine: %s\n", *target, err)
-						return
+						return false, false, fmt.Errorf("Error from %s machine: %s", *target, err), 7
 					}
 				}
 			}
 			if err := mach.Run(); err != nil {
 				fmt.Printf("Something went wrong during machine execution: %s!", err)
-				//TODO: dump image contents
+				return false, false, fmt.Errorf("Something went wrong during machine execution: %s!", err), 8
 			}
 		}
+		return false, false, nil, 0
 	}
 }
 
