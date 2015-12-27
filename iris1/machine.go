@@ -554,6 +554,8 @@ const (
 	codeSegment segment = iota
 	dataSegment
 	microcodeSegment
+	stackSegment
+	callSegment
 	numSegments
 )
 
@@ -566,5 +568,5 @@ func (this segment) acceptsDwords() bool {
 	return this == codeSegment
 }
 func (this segment) acceptsWords() bool {
-	return this == dataSegment || this == microcodeSegment
+	return this == dataSegment || this == microcodeSegment || this == stackSegment || this == callSegment
 }
