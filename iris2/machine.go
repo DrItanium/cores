@@ -1,5 +1,5 @@
-// machine description of iris1
-package iris1
+// machine description of iris2
+package iris2
 
 import (
 	"encoding/binary"
@@ -8,7 +8,7 @@ import (
 )
 
 func RegistrationName() string {
-	return "iris1"
+	return "iris2"
 }
 
 // Dummy function to force inclusion
