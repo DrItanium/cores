@@ -285,6 +285,8 @@ var keywords = map[string]nodeType{
 	"gt":         keywordGreaterThan,
 	"le":         keywordLessThanOrEqualTo,
 	"ge":         keywordGreaterThanOrEqualTo,
+	"push":       keywordPush,
+	"pop":        keywordPop,
 }
 
 func (this *node) parseGeneric(str string) error {
@@ -684,7 +686,7 @@ func (this *_parser) parseStatement(stmt *statement) error {
 		}
 	case keywordAdd, keywordSub, keywordMul, keywordDiv, keywordRem, keywordShiftLeft, keywordShiftRight, keywordAnd, keywordOr, keywordNot, keywordXor, keywordIncrement, keywordDecrement, keywordHalve:
 		return this.parseArithmetic(first, rest)
-	case keywordMove, keywordSet, keywordSwap, keywordLoad, keywordStore:
+	case keywordMove, keywordSet, keywordSwap, keywordLoad, keywordStore, keywordPop, keywordPush:
 		return this.parseMove(first, rest)
 	case keywordEqual, keywordNotEqual, keywordLessThan, keywordGreaterThan, keywordLessThanOrEqualTo, keywordGreaterThanOrEqualTo:
 		return this.parseCompare(first, rest)
