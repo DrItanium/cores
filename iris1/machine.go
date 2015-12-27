@@ -209,6 +209,7 @@ type Core struct {
 	gpr   [RegisterCount - UserRegisterBegin]Word
 	code  [MemorySize]Instruction
 	data  [MemorySize]Word
+	ucode [MemorySize]Word
 	stack [MemorySize]Word
 	call  [MemorySize]Word
 	// internal registers that should be easy to find
@@ -498,6 +499,13 @@ func (this *Core) InstallProgram(input <-chan byte) error {
 			this.data[i] = inst
 		}
 	}
+	for i := 0; i < MemorySize; i++ {
+		if inst, err := readWord(input); err != nil {
+			return err
+		} else {
+			this.ucode[i] = inst
+		}
+	}
 	return nil
 }
 
@@ -510,6 +518,12 @@ func (this *Core) Dump(output chan<- byte) error {
 		}
 	}
 	for _, dat := range this.data {
+		binary.LittleEndian.PutUint16(word, uint16(dat))
+		for _, v := range word {
+			output <- v
+		}
+	}
+	for _, dat := range this.ucode {
 		binary.LittleEndian.PutUint16(word, uint16(dat))
 		for _, v := range word {
 			output <- v

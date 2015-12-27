@@ -37,6 +37,7 @@ type segment int
 const (
 	codeSegment segment = iota
 	dataSegment
+	microcodeSegment
 	numSegments
 )
 
@@ -80,6 +81,7 @@ const (
 	typeDirectiveOrg
 	typeDirectiveWord
 	typeDirectiveAlias
+	typeDirectiveMicrocode
 	// keywords
 	// memory words
 	keywordSet
@@ -227,11 +229,12 @@ func (this *node) parseRegister(val string) error {
 }
 
 var directives = map[string]nodeType{
-	"data":  typeDirectiveData,
-	"code":  typeDirectiveCode,
-	"org":   typeDirectiveOrg,
-	"word":  typeDirectiveWord,
-	"alias": typeDirectiveAlias,
+	"data":      typeDirectiveData,
+	"code":      typeDirectiveCode,
+	"org":       typeDirectiveOrg,
+	"word":      typeDirectiveWord,
+	"alias":     typeDirectiveAlias,
+	"microcode": typeDirectiveMicrocode,
 }
 
 func (this *node) parseDirective(val string) error {
@@ -471,6 +474,12 @@ func (this *_parser) Dump(pipe chan<- byte) error {
 			pipe <- b
 		}
 	}
+	for _, val := range this.core.ucode {
+		binary.LittleEndian.PutUint16(d, uint16(val))
+		for _, b := range d {
+			pipe <- b
+		}
+	}
 	return nil
 }
 func (this *_parser) parseAlias(nodes []*node) error {
@@ -524,31 +533,37 @@ func (this *_parser) setPosition(nodes []*node) error {
 		}
 	}
 }
-
+func (this segment) acceptsWords() bool {
+	return this == dataSegment || this == microcodeSegment
+}
 func (this *_parser) setData(nodes []*node) error {
 	if len(nodes) == 0 {
 		return fmt.Errorf("Word directive requires a value")
 	} else if len(nodes) > 1 {
 		return fmt.Errorf("Too many arguments provided to the word directive!")
-	} else {
-		switch this.currSegment {
-		case codeSegment:
-			return fmt.Errorf("Word directives can't be in the code segment!")
-		case dataSegment:
-			addr := nodes[0]
-			switch addr.Type {
-			case typeHexImmediate, typeBinaryImmediate, typeImmediate:
-				this.core.data[this.addrs[this.currSegment]] = addr.Value.(Word)
-			case typeLabel:
-				this.indirectAddresses = append(this.indirectAddresses, indirectAddress{label: addr.Value.(string), seg: dataSegment, address: this.addrs[this.currSegment]})
-			default:
-				return fmt.Errorf("word directives can only accept immediates or labels right now")
+	} else if this.currSegment == codeSegment {
+		return fmt.Errorf("Word directives can't be in the code segment!")
+	} else if this.currSegment.acceptsWords() {
+		addr := nodes[0]
+		t := this.addrs[this.currSegment]
+		switch addr.Type {
+		case typeHexImmediate, typeBinaryImmediate, typeImmediate:
+			val := addr.Value.(Word)
+			switch this.currSegment {
+			case dataSegment:
+				this.core.data[t] = val
+			case microcodeSegment:
+				this.core.ucode[t] = val
 			}
-			this.addrs[this.currSegment]++
-			return nil
+		case typeLabel:
+			this.indirectAddresses = append(this.indirectAddresses, indirectAddress{label: addr.Value.(string), seg: this.currSegment, address: this.addrs[this.currSegment]})
 		default:
-			panic("Programmer Failure! Found self in a illegal segment!")
+			return fmt.Errorf("word directives can only accept immediates and labels right now")
 		}
+		this.addrs[this.currSegment]++
+		return nil
+	} else {
+		panic("Programmer Failure! Current segment is not legal!")
 	}
 }
 func (this *_parser) newLabel(n *node) error {
@@ -585,15 +600,6 @@ func (this *_parser) installInstruction(inst *Instruction) error {
 		return fmt.Errorf("Must install instructions to the code segment")
 	} else {
 		this.core.code[this.addrs[this.currSegment]] = *inst
-		this.addrs[this.currSegment]++
-		return nil
-	}
-}
-func (this *_parser) installData(data Word) error {
-	if this.currSegment != dataSegment {
-		return fmt.Errorf("Must install words to the data segment!")
-	} else {
-		this.core.data[this.addrs[this.currSegment]] = data
 		this.addrs[this.currSegment]++
 		return nil
 	}
