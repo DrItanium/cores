@@ -32,15 +32,6 @@ func init() {
 	parser.Register(RegistrationName(), ParsingRegistrar(generateParser))
 }
 
-type segment int
-
-const (
-	codeSegment segment = iota
-	dataSegment
-	microcodeSegment
-	numSegments
-)
-
 type nodeType int
 
 func (this nodeType) isComma() bool {
@@ -533,9 +524,6 @@ func (this *_parser) setPosition(nodes []*node) error {
 		}
 	}
 }
-func (this segment) acceptsWords() bool {
-	return this == dataSegment || this == microcodeSegment
-}
 func (this *_parser) setData(nodes []*node) error {
 	if len(nodes) == 0 {
 		return fmt.Errorf("Word directive requires a value")
@@ -727,6 +715,26 @@ func (this *_parser) parseStatement(stmt *statement) error {
 	return nil
 }
 
+var segments = map[string]segment{
+	"code":      codeSegment,
+	"data":      dataSegment,
+	"microcode": microcodeSegment,
+}
+
+func translateSegment(str string) (segment, error) {
+	if val, ok := segments[str]; !ok {
+		return 0, fmt.Errorf("%s is not a legal segment", str)
+	} else {
+		return val, nil
+	}
+}
+func (this *node) getSegment() (segment, error) {
+	if this.Type == typeId {
+		return translateSegment(this.Value.(string))
+	} else {
+		return 0, fmt.Errorf("Segment names can only be typeIds")
+	}
+}
 func (this *_parser) parseMove(first *node, rest []*node) error {
 	deferred := false
 	var d DecodedInstruction
@@ -756,11 +764,8 @@ func (this *_parser) parseMove(first *node, rest []*node) error {
 				if err := this.resolveSingleArgMove(&d, dv); err != nil {
 					return err
 				}
-			} else if dv.Type.immediate() {
-				d.Op = MoveOpPushImmediate
-				d.SetImmediate(dv.Value.(Word))
 			} else {
-				return fmt.Errorf("Illegal operand type for push operation!")
+				return fmt.Errorf("Push only accepts registers!")
 			}
 		}
 	case 4:
@@ -790,8 +795,10 @@ func (this *_parser) parseMove(first *node, rest []*node) error {
 					d.Op = MoveOpSwap
 				case keywordLoad:
 					d.Op = MoveOpLoad
+					d.Data[2] = byte(dataSegment)
 				case keywordStore:
 					d.Op = MoveOpStore
+					d.Data[2] = byte(dataSegment)
 				default:
 					return fmt.Errorf("Illegal move operation %d", first.Type)
 				}
@@ -812,14 +819,39 @@ func (this *_parser) parseMove(first *node, rest []*node) error {
 				switch first.Type {
 				case keywordSet:
 					d.Op = MoveOpSet
-				case keywordLoad:
-					d.Op = MoveOpLoadMem
-				case keywordStore:
-					d.Op = MoveOpStoreImm
 				default:
 					return fmt.Errorf("move op %s doesn't have an immediate form", first.Value.(string))
 				}
 			}
+		}
+	case 6:
+		if !rest[5].Type.comment() {
+			return fmt.Errorf("Too many arguments provided to a normal move operation")
+		}
+		fallthrough
+	case 5:
+		if dv, err := this.resolveRegister(rest[0]); err != nil {
+			return err
+		} else if rest[1].Type != typeEquals {
+			return fmt.Errorf("An = is necessary to separate the destination from source of a move operation")
+		} else if src, err := this.resolveRegister(rest[2]); err != nil {
+			return err
+		} else if rest[3].Type != typeComma {
+			return fmt.Errorf("In load and store operations a comma is necessary between source register and target segment")
+		} else if seg, err := rest[4].getSegment(); err != nil {
+			return err
+		} else if seg == codeSegment {
+			return fmt.Errorf("The code segment can't be a target of a load or store")
+		} else {
+			switch first.Type {
+			case keywordLoad:
+				d.Op = MoveOpLoad
+			case keywordStore:
+				d.Op = MoveOpStore
+			default:
+				return fmt.Errorf("Illegal move operation %d", first.Type)
+			}
+			d.Data = [3]byte{dv, src, byte(seg)}
 		}
 	default:
 		return fmt.Errorf("Too few or too many arguments provided to a move operation!")

@@ -3,36 +3,14 @@ package iris1
 
 import "fmt"
 
-func swapMemory(core *Core, addr0, data0, addr1, data1 Word) error {
-	if err := core.SetDataMemory(addr0, data1); err != nil {
-		return err
-	} else if err := core.SetDataMemory(addr1, data0); err != nil {
-		return err
-	} else {
-		return nil
-	}
-}
-func swapMemoryAndRegister(core *Core, reg byte, data0, addr, data1 Word) error {
-	if err := core.SetRegister(reg, data1); err != nil {
-		return err
-	} else if err := core.SetDataMemory(addr, data0); err != nil {
-		return err
-	} else {
-		return nil
-	}
-}
-
 const (
 	// Move Operations
 	MoveOpMove = iota
 	MoveOpSwap
 	MoveOpSet
 	MoveOpLoad
-	MoveOpLoadMem
 	MoveOpStore
-	MoveOpStoreImm
 	MoveOpPush
-	MoveOpPushImmediate
 	MoveOpPop
 	MoveOpPeek
 	// always last
@@ -52,11 +30,8 @@ var moveTable = [32]MoveOp{
 	swapRegisters,
 	moveOpSet,
 	load,
-	loadImm,
 	store,
-	storeImm,
 	moveOpPush,
-	moveOpPushImm,
 	moveOpPop,
 	moveOpPeek,
 	unimplementedMoveOp,
@@ -86,60 +61,65 @@ func init() {
 	}
 }
 func moveRegister(core *Core, inst *DecodedInstruction) error {
-	dest := inst.Data[0]
-	src0 := inst.Data[1]
-	return core.SetRegister(dest, core.Register(src0))
+	dest, src := inst.Data[0], core.Register(inst.Data[1])
+	return core.SetRegister(dest, src)
 }
 func swapRegisters(core *Core, inst *DecodedInstruction) error {
-	dest := inst.Data[0]
-	src0 := inst.Data[1]
-	r0 := core.Register(dest)
-	r1 := core.Register(src0)
+	dest, src0 := inst.Data[0], inst.Data[1]
+	r0, r1 := core.Register(dest), core.Register(src0)
 	if err := core.SetRegister(src0, r0); err != nil {
 		return err
-	}
-	if err := core.SetRegister(dest, r1); err != nil {
+	} else if err := core.SetRegister(dest, r1); err != nil {
 		return err
+	} else {
+		return nil
 	}
-	return nil
 }
 func moveOpSet(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
 	return core.SetRegister(dest, inst.Immediate())
 }
 func load(core *Core, inst *DecodedInstruction) error {
-	dest := inst.Data[0]
-	src0 := inst.Data[1]
-	return core.SetRegister(dest, core.DataMemory(core.Register(src0)))
-}
-func loadImm(core *Core, inst *DecodedInstruction) error {
-	dest := inst.Data[0]
-	return core.SetRegister(dest, core.DataMemory(inst.Immediate()))
+	var val Word
+	dest, addr, seg := inst.Data[0], core.Register(inst.Data[1]), segment(inst.Data[2])
+	switch seg {
+	case dataSegment:
+		val = core.DataMemory(addr)
+	case microcodeSegment:
+		val = core.MicrocodeMemory(addr)
+	case codeSegment:
+		return fmt.Errorf("Can't load from the code segment!")
+	default:
+		return fmt.Errorf("Attempted to load from illegal segment %d", seg)
+	}
+	return core.SetRegister(dest, val)
 }
 
 func store(core *Core, inst *DecodedInstruction) error {
-	dest := inst.Data[0]
-	src0 := inst.Data[1]
-	return core.SetDataMemory(core.Register(dest), core.Register(src0))
+	dest, src, seg := inst.Data[0], core.Register(inst.Data[1]), segment(inst.Data[2])
+	switch segment(seg) {
+	case dataSegment:
+		return core.SetDataMemory(core.Register(dest), src)
+	case microcodeSegment:
+		return core.SetMicrocodeMemory(core.Register(dest), src)
+	case codeSegment:
+		return fmt.Errorf("Can't write to code memory!")
+	default:
+		return fmt.Errorf("Attempted to write to illegal segment %d", seg)
+	}
 }
 
-func storeImm(core *Core, inst *DecodedInstruction) error {
-	dest := inst.Data[0]
-	return core.SetDataMemory(core.Register(dest), inst.Immediate())
-}
 func moveOpPush(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
 	core.Push(core.Register(dest))
 	return nil
 }
-func moveOpPushImm(core *Core, inst *DecodedInstruction) error {
-	core.Push(inst.Immediate())
-	return nil
-}
+
 func moveOpPop(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
 	return core.SetRegister(dest, core.Pop())
 }
+
 func moveOpPeek(core *Core, inst *DecodedInstruction) error {
 	dest := inst.Data[0]
 	return core.SetRegister(dest, core.Peek())

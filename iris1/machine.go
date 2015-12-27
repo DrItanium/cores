@@ -299,6 +299,15 @@ func (this *Core) SetDataMemory(address, value Word) error {
 	return nil
 }
 
+func (this *Core) MicrocodeMemory(address Word) Word {
+	return this.ucode[address]
+}
+
+func (this *Core) SetMicrocodeMemory(address, value Word) error {
+	this.ucode[address] = value
+	return nil
+}
+
 var defaultExecutionUnits = []struct {
 	Group byte
 	Unit  ExecutionUnit
@@ -537,4 +546,25 @@ func (this *Core) Startup() error {
 }
 func (this *Core) Shutdown() error {
 	return nil
+}
+
+type segment int
+
+const (
+	codeSegment segment = iota
+	dataSegment
+	microcodeSegment
+	numSegments
+)
+
+func init() {
+	if numSegments > 255 {
+		panic("Too many memory segments described!")
+	}
+}
+func (this segment) acceptsDwords() bool {
+	return this == codeSegment
+}
+func (this segment) acceptsWords() bool {
+	return this == dataSegment || this == microcodeSegment
 }
