@@ -509,11 +509,15 @@ func (this *_parser) setSegment(nodes []*node, seg segment, name string) error {
 	}
 }
 func (this *_parser) setPosition(nodes []*node) error {
-	if len(nodes) == 0 {
+	switch len(nodes) {
+	case 0:
 		return fmt.Errorf("No arguments provided to org directive")
-	} else if len(nodes) > 1 {
-		return fmt.Errorf("Too many arguments provided to an org directive")
-	} else {
+	case 2:
+		if !nodes[1].Type.comment() {
+			return fmt.Errorf("Too many arguments provided to an org directive")
+		}
+		fallthrough
+	case 1:
 		addr := nodes[0]
 		switch addr.Type {
 		case typeHexImmediate, typeBinaryImmediate, typeImmediate:
@@ -522,6 +526,8 @@ func (this *_parser) setPosition(nodes []*node) error {
 		default:
 			return fmt.Errorf("Org directive requires an immediate value")
 		}
+	default:
+		return fmt.Errorf("Too many arguments provided to an org directive")
 	}
 }
 func (this *_parser) setData(nodes []*node) error {
