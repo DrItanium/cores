@@ -106,8 +106,6 @@ type halfWord uint32
 type word uint64
 type dword [2]uint64
 type floatWord float64
-type instruction [32]byte
-type instructionField byte
 
 type dataAbstraction interface {
 	Float() (floatWord, error)
@@ -127,7 +125,7 @@ func (this word) Bool() (predicate, error) {
 }
 
 func (this word) Instruction() (instruction, error) {
-	return instruction(this), nil
+	return nil, fmt.Errorf("Can't convert word to instruction automatically!")
 }
 
 func (this floatWord) Float() (floatWord, error) {
@@ -141,7 +139,7 @@ func (this floatWord) Bool() (predicate, error) {
 }
 
 func (this floatWord) Instruction() (instruction, error) {
-	return instruction(math.Float64bits(this)), nil
+	return nil, fmt.Errorf("Can't convert from floatWord to instruction automatically!")
 }
 
 func (this predicate) Float() (floatWord, error) {
@@ -158,149 +156,7 @@ func (this predicate) Bool() (predicate, error) {
 	return this, nil
 }
 func (this predicate) Instruction() (instruction, error) {
-	if this {
-		return instruction(1), nil
-	} else {
-		return instruction(0), nil
-	}
-}
-
-const (
-	fieldPredicate instructionField = iota
-	fieldControlPrimary
-	fieldControlSecondary
-	fieldDest
-	fieldSrc0
-	fieldSrc1
-	fieldMiscLower
-	fieldMiscUpper
-	fieldCount // always last
-)
-
-func init() {
-	if fieldCount > 8 {
-		panic("iris2: Too many fields described in the raw instruction field listing")
-	}
-}
-
-var iFields = []struct {
-	mask  word
-	shift byte
-}{
-	{mask: 0x00000000000000FF, shift: 0},
-	{mask: 0x000000000000FF00, shift: 8},
-	{mask: 0x0000000000FF0000, shift: 16},
-	{mask: 0x00000000FF000000, shift: 24},
-	{mask: 0x000000FF00000000, shift: 32},
-	{mask: 0x0000FF0000000000, shift: 40},
-	{mask: 0x00FF000000000000, shift: 48},
-	{mask: 0xFF00000000000000, shift: 56},
-}
-
-func (this instruction) Int() (word, error) {
-	return word(this), nil
-}
-func (this instruction) Float() (floatWord, error) {
-	return word(this).Float()
-}
-func (this instruction) Bool() (predicate, error) {
-	return word(this).Bool()
-}
-func (this instruction) getField(index instructionField) (byte, error) {
-	if index >= len(iFields) {
-		return 0, fmt.Errorf("Field index %d is not a legal field!", index)
-	} else {
-		return byte((this & iFields[index].mask) >> iFields[index].mask), nil
-	}
-}
-func (this *instruction) setField(index instructionField, value byte) error {
-	if index >= len(iFields) {
-		return fmt.Errorf("Field index %d is not a legal field!", index)
-	} else {
-		*this = (*this &^ iFields[index].mask) | (word(value) << iFields[index].shift)
-		return nil
-	}
-}
-func (this instruction) group() byte {
-	return byte(this.getField(fieldControlPrimary) & 0x7)
-}
-func (this instruction) op() byte {
-	return byte((this.getField(fieldControlPrimary) & 0xF8) >> 3)
-}
-
-func (this *instruction) setGroup(group byte) error {
-	if fld, err := this.getField(fieldControlPrimary); err != nil {
-		return err
-	} else {
-		return this.setField(fieldControlPrimary, (fld&^0x7)|group)
-	}
-}
-
-func (this *instruction) setOp(op byte) error {
-	if fld, err := this.getField(fieldControlPrimary); err != nil {
-		return err
-	} else {
-		return this.setField(fieldControlPrimary, (fld&^0xF8)|(op<<3))
-	}
-}
-
-type decodedInstruction struct {
-	predicate byte
-	group, op byte // one byte encoded
-	control2  byte
-	data      [5]byte
-}
-
-func (this instruction) decode() (*decodedInstruction, error) {
-	var di decodedInstruction
-	di.group = this.group()
-	di.op = this.op()
-	if p, err = this.getField(fieldPredicate); err != nil {
-		return nil, err
-	} else if d0, err := this.getField(fieldControlSecondary); err != nil {
-		return nil, err
-	} else if d1, err := this.getField(fieldDest); err != nil {
-		return nil, err
-	} else if d2, err := this.getField(fieldSrc0); err != nil {
-		return nil, err
-	} else if d3, err := this.getField(fieldSrc1); err != nil {
-		return nil, err
-	} else if d4, err := this.getField(fieldMiscLower); err != nil {
-		return nil, err
-	} else if d5, err := this.getField(fieldMiscUpper); err != nil {
-		return nil, err
-	} else {
-		di.control2 = d0
-		di.data = [5]byte{d1, d2, d3, d4, d5}
-		return &di, nil
-	}
-}
-
-var dataTranslationTable = []instructionField{
-	fieldDest,
-	fieldSrc0,
-	fieldSrc1,
-	fieldMiscLower,
-	fieldMiscUpper,
-}
-
-func (this *decodedInstruction) Encode() (*instruction, error) {
-	var i instruction
-	// encode group
-	if err := i.setField(fieldPredicate, this.predicate); err != nil {
-		return nil, err
-	} else if err := i.setField(fieldControlSecondary, this.control2); err != nil {
-		return nil, err
-	} else {
-		i.setGroup(this.group)
-		i.setOp(this.op)
-		for x, v := range this.data {
-			if err := i.setField(dataTranslationTable[x], v); err != nil {
-				return nil, err
-			}
-		}
-		return &i, nil
-	}
+	return nil, fmt.Errorf("Can't convert from predicate to instruction automatically!")
 }
 
 type machError struct {
