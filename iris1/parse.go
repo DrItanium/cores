@@ -228,7 +228,7 @@ var directives = map[string]nodeType{
 	"alias":     typeDirectiveAlias,
 	"microcode": typeDirectiveMicrocode,
 	"stack":     typeDirectiveStack,
-	"call":      typeDirectiveCall,
+	"procedure": typeDirectiveCall,
 }
 
 func (this *node) parseDirective(val string) error {
@@ -716,7 +716,7 @@ var segments = map[string]segment{
 	"data":      dataSegment,
 	"microcode": microcodeSegment,
 	"stack":     stackSegment,
-	"call":      callSegment,
+	"procedure": callSegment,
 }
 
 func translateSegment(str string) (segment, error) {
@@ -730,7 +730,7 @@ func (this *node) getSegment() (segment, error) {
 	if this.Type == typeId {
 		return translateSegment(this.Value.(string))
 	} else {
-		return 0, fmt.Errorf("Segment names can only be typeIds")
+		return 0, fmt.Errorf("Segment names (%s) can only be typeIds but is %d", this.Value, this.Type)
 	}
 }
 func (this *_parser) parseMove(first *node, rest []*node) error {
