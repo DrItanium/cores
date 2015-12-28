@@ -66,16 +66,16 @@ const (
 	CompareBodyError
 )
 
-type compareOpBody func(Word, Word) (bool, error)
+type compareOpBody func(word, word) (bool, error)
 
 var bodyOps = []compareOpBody{
-	func(a, b Word) (bool, error) { return a == b, nil },
-	func(a, b Word) (bool, error) { return a != b, nil },
-	func(a, b Word) (bool, error) { return a < b, nil },
-	func(a, b Word) (bool, error) { return a > b, nil },
-	func(a, b Word) (bool, error) { return a <= b, nil },
-	func(a, b Word) (bool, error) { return a >= b, nil },
-	func(a, b Word) (bool, error) { return false, fmt.Errorf("Invalid compare body op!") },
+	func(a, b word) (bool, error) { return a == b, nil },
+	func(a, b word) (bool, error) { return a != b, nil },
+	func(a, b word) (bool, error) { return a < b, nil },
+	func(a, b word) (bool, error) { return a > b, nil },
+	func(a, b word) (bool, error) { return a <= b, nil },
+	func(a, b word) (bool, error) { return a >= b, nil },
+	func(a, b word) (bool, error) { return false, fmt.Errorf("Invalid compare body op!") },
 }
 
 type compareOp struct {
@@ -84,7 +84,7 @@ type compareOp struct {
 
 var errorCompareOp = compareOp{Body: CompareBodyError, Combine: CombineError}
 
-func (this *compareOp) Invoke(oldVal bool, new0, new1 Word) (bool, error) {
+func (this *compareOp) Invoke(oldVal bool, new0, new1 word) (bool, error) {
 	if result, err := bodyOps[this.Body](new0, new1); err != nil {
 		return false, err
 	} else {
@@ -127,7 +127,7 @@ var compareOps = [32]compareOp{
 	errorCompareOp,
 }
 
-func boolToWord(val bool) Word {
+func boolToword(val bool) word {
 	if val {
 		return 1
 	} else {
@@ -138,6 +138,6 @@ func compare(core *Core, inst *DecodedInstruction) error {
 	if val, err := compareOps[inst.Op].Invoke(core.PredicateValue(inst.Data[0]), core.Register(inst.Data[1]), core.Register(inst.Data[2])); err != nil {
 		return err
 	} else {
-		return core.SetRegister(inst.Data[0], boolToWord(val))
+		return core.SetRegister(inst.Data[0], boolToword(val))
 	}
 }

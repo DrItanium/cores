@@ -123,17 +123,17 @@ type node struct {
 	Type  nodeType
 }
 
-func parseHexImmediate(str string) (Word, error) {
+func parseHexImmediate(str string) (word, error) {
 	val, err := strconv.ParseUint(str, 16, 16)
-	return Word(val), err
+	return word(val), err
 }
-func parseBinaryImmediate(str string) (Word, error) {
+func parseBinaryImmediate(str string) (word, error) {
 	val, err := strconv.ParseUint(str, 2, 16)
-	return Word(val), err
+	return word(val), err
 }
-func parseDecimalImmediate(str string) (Word, error) {
+func parseDecimalImmediate(str string) (word, error) {
 	val, err := strconv.ParseUint(str, 10, 16)
-	return Word(val), err
+	return word(val), err
 }
 func parseRegisterValue(str string) (byte, error) {
 	val, err := strconv.ParseUint(str, 10, 8)
@@ -422,7 +422,7 @@ func carveLine(line string) statement {
 
 type labelEntry struct {
 	seg  segment
-	addr Word
+	addr word
 }
 
 type labelMap map[string]labelEntry
@@ -430,10 +430,10 @@ type labelMap map[string]labelEntry
 type indirectAddress struct {
 	seg     segment
 	label   string
-	address Word
+	address word
 }
 type deferredInstruction struct {
-	addr    Word
+	addr    word
 	inst    *DecodedInstruction
 	trouble *node
 }
@@ -442,7 +442,7 @@ type _parser struct {
 	core                 *Core
 	statements           []statement
 	labels               labelMap
-	addrs                [numSegments]Word
+	addrs                [numSegments]word
 	currSegment          segment
 	aliases              map[string]byte
 	indirectAddresses    []indirectAddress
@@ -505,7 +505,7 @@ func (this *_parser) setPosition(nodes []*node) error {
 		addr := nodes[0]
 		switch addr.Type {
 		case typeHexImmediate, typeBinaryImmediate, typeImmediate:
-			this.addrs[this.currSegment] = addr.Value.(Word)
+			this.addrs[this.currSegment] = addr.Value.(word)
 			return nil
 		default:
 			return fmt.Errorf("Org directive requires an immediate value")
@@ -526,7 +526,7 @@ func (this *_parser) setData(nodes []*node) error {
 		t := this.addrs[this.currSegment]
 		switch addr.Type {
 		case typeHexImmediate, typeBinaryImmediate, typeImmediate:
-			val := addr.Value.(Word)
+			val := addr.Value.(word)
 			switch this.currSegment {
 			case dataSegment:
 				this.core.data[t] = val
@@ -602,7 +602,7 @@ func (this *_parser) isLabelReference(n *node) bool {
 		return false
 	}
 }
-func (this *_parser) resolveLabel(name string) (Word, error) {
+func (this *_parser) resolveLabel(name string) (word, error) {
 	if v, ok := this.labels[name]; !ok {
 		return 0, fmt.Errorf("Label %s does not exist!", name)
 	} else {
@@ -802,7 +802,7 @@ func (this *_parser) parseMove(first *node, rest []*node) error {
 				}
 			} else {
 				if src.Type.immediate() {
-					d.SetImmediate(src.Value.(Word))
+					d.SetImmediate(src.Value.(word))
 				} else if src.Type == typeId {
 					if v, err := this.resolveLabel(src.Value.(string)); err != nil {
 						// defer it for now
@@ -956,7 +956,7 @@ func (this *_parser) parseSystem(d *DecodedInstruction, rest []*node) error {
 	case 5:
 		if id := rest[0]; !id.Type.immediate() {
 			return fmt.Errorf("First argument of a system must be an 8-bit immediate")
-		} else if idx := id.Value.(Word); idx > 255 {
+		} else if idx := id.Value.(word); idx > 255 {
 			return fmt.Errorf("Provided system operation immediate is larger than 7-bits!")
 		} else if !rest[1].Type.isComma() {
 			return fmt.Errorf("Comma is required after immediate in system operation")
@@ -1062,7 +1062,7 @@ func (this *_parser) parseArithmetic(t *node, nodes []*node) error {
 			}
 			if src1.Type.immediate() {
 				// immediate form
-				if immediate := src1.Value.(Word); immediate > 255 {
+				if immediate := src1.Value.(word); immediate > 255 {
 					return fmt.Errorf("Immediate value for arithmetic operation is too large: %d > 255", immediate)
 				} else {
 					inst.Data[2] = byte(immediate)
@@ -1230,7 +1230,7 @@ func (this *_parser) parseJump(first *node, rest []*node) error {
 						d.Data[1] = q
 					}
 				} else if dest.Type.immediate() {
-					d.SetImmediate(dest.Value.(Word))
+					d.SetImmediate(dest.Value.(word))
 				} else if dest.Type == typeId {
 					// check for label and defer if necessary
 					if v, err := this.resolveLabel(dest.Value.(string)); err != nil {
@@ -1263,7 +1263,7 @@ func (this *_parser) parseJump(first *node, rest []*node) error {
 						d.Data[0] = q
 					}
 				} else if dest.Type.immediate() {
-					d.SetImmediate(dest.Value.(Word))
+					d.SetImmediate(dest.Value.(word))
 				} else {
 					if v, err := this.resolveLabel(dest.Value.(string)); err != nil {
 						// defer it for now

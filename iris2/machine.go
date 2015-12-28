@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/DrItanium/cores/registration/machine"
+	"math"
 )
 
 func RegistrationName() string {
@@ -21,7 +22,7 @@ func (this MachineRegistrar) New(args ...interface{}) (machine.Machine, error) {
 }
 
 func generateCore(a ...interface{}) (machine.Machine, error) {
-	return New()
+	return newCore()
 }
 
 func init() {
@@ -29,48 +30,49 @@ func init() {
 }
 
 const (
-	RegisterCount            = 256
-	MemorySize               = 65536
-	MajorOperationGroupCount = 8
-	SystemCallCount          = 256
+	generalPurposeRegisterCount = 256
+	floatRegisterCount          = 256
+	predicateRegisterCount      = 256
+	majorOperationGroupCount    = 8
+	systemCallCount             = 256
+	dataMemorySize              = 268435456 / 8 // 256mb
+	stackMemorySize             = 268435456 / 8
+	callMemorySize              = 268435456 / 8
+	codeMemorySize              = 268435456 / 8
+	microcodeMemorySize         = 268435456 / 8
 )
-const (
-	// reserved registers
-	FalseRegister = iota
-	TrueRegister
-	InstructionPointer
-	StackPointer
-	PredicateRegister
-	CallPointer
-	UserRegisterBegin
-)
+
+type errorCode int
 
 const (
 	// Error codes
-	ErrorNone = iota
-	ErrorPanic
-	ErrorGetRegisterOutOfRange
-	ErrorPutRegisterOutOfRange
-	ErrorInvalidInstructionGroupProvided
-	ErrorInvalidArithmeticOperation
-	ErrorInvalidMoveOperation
-	ErrorInvalidJumpOperation
-	ErrorInvalidCompareOperation
-	ErrorInvalidMiscOperation
-	ErrorInvalidSystemCommand
-	ErrorWriteToFalseRegister
-	ErrorWriteToTrueRegister
-	ErrorEncodeByteOutOfRange
-	ErrorGroupValueOutOfRange
-	ErrorOpValueOutOfRange
+	errorNone errorCode = iota
+	errorPanic
+	errorGetRegisterOutOfRange
+	errorPutRegisterOutOfRange
+	errorInvalidInstructionGroupProvided
+	errorInvalidArithmeticOperation
+	errorInvalidMoveOperation
+	errorInvalidJumpOperation
+	errorInvalidCompareOperation
+	errorInvalidMiscOperation
+	errorInvalidSystemCommand
+	errorWriteToFalseRegister
+	errorWriteToTrueRegister
+	errorEncodeByteOutOfRange
+	errorGroupValueOutOfRange
+	errorOpValueOutOfRange
 )
+
+type instructionGroup byte
+
 const (
 	// Instruction groups
-	InstructionGroupArithmetic = iota
-	InstructionGroupMove
-	InstructionGroupJump
-	InstructionGroupCompare
-	InstructionGroupMisc
+	igArithmetic instructionGroup = iota
+	igMove
+	igJump
+	igCompare
+	igMisc
 )
 
 var errorLookup = []string{
@@ -92,107 +94,161 @@ var errorLookup = []string{
 	"Provided op id %d is larger than the space allotted to specifying the op",
 }
 
-type Word uint16
-type Dword uint32
-type Instruction Dword
+type predicate bool
+type halfWord uint32
+type word uint64
+type dword [2]uint64
+type floatWord float64
+type instruction word
+type instructionField byte
 
-func (this Instruction) group() byte {
-	return byte(((this & 0x000000FF) & 0x7))
-}
-func (this Instruction) op() byte {
-	return byte(((this & 0x000000FF) & 0xF8) >> 3)
-}
-func (this Instruction) register(index int) (byte, error) {
-	switch index {
-	case 0:
-		return byte(this), nil
-	case 1:
-		return byte((this & 0x0000FF00) >> 8), nil
-	case 2:
-		return byte((this & 0x00FF0000) >> 16), nil
-	case 3:
-		return byte((this & 0xFF000000) >> 24), nil
-	default:
-		return 0, fmt.Errorf("Register index: %d is out of range!", index)
+const (
+	fieldPredicate instructionField = iota
+	fieldControlPrimary
+	fieldControlSecondary
+	fieldDest
+	fieldSrc0
+	fieldSrc1
+	fieldMiscLower
+	fieldMiscUpper
+	fieldCount // always last
+)
+
+func init() {
+	if fieldCount > 8 {
+		panic("iris2: Too many fields described in the raw instruction field listing")
 	}
 }
 
-func (this *Instruction) setGroup(group byte) {
-	*this = ((*this &^ 0x7) | Instruction(group))
+var iFields = []struct {
+	mask  word
+	shift byte
+}{
+	{mask: 0x00000000000000FF, shift: 0},
+	{mask: 0x000000000000FF00, shift: 8},
+	{mask: 0x0000000000FF0000, shift: 16},
+	{mask: 0x00000000FF000000, shift: 24},
+	{mask: 0x000000FF00000000, shift: 32},
+	{mask: 0x0000FF0000000000, shift: 40},
+	{mask: 0x00FF000000000000, shift: 48},
+	{mask: 0xFF00000000000000, shift: 56},
 }
-func (this *Instruction) setOp(op byte) {
-	*this = ((*this &^ 0xF8) | (Instruction(op) << 3))
+
+func (this instruction) Int() (word, error) {
+	return word(this), nil
 }
-func (this *Instruction) setByte(index int, value byte) error {
-	switch index {
-	case 1:
-		*this = ((*this &^ 0x0000FF00) | (Instruction(value) << 8))
-	case 2:
-		*this = ((*this &^ 0x00FF0000) | (Instruction(value) << 16))
-	case 3:
-		*this = ((*this &^ 0xFF000000) | (Instruction(value) << 24))
-	default:
-		return NewError(ErrorEncodeByteOutOfRange, uint(index))
+func (this instruction) Float() (floatWord, error) {
+	return word(this).Float()
+}
+func (this instruction) Bool() (predicate, error) {
+	return word(this).Bool()
+}
+func (this instruction) getField(index instructionField) (byte, error) {
+	if index >= len(iFields) {
+		return 0, fmt.Errorf("Field index %d is not a legal field!", index)
+	} else {
+		return byte((this & iFields[index].mask) >> iFields[index].mask), nil
 	}
-	return nil
+}
+func (this *instruction) setField(index instructionField, value byte) error {
+	if index >= len(iFields) {
+		return fmt.Errorf("Field index %d is not a legal field!", index)
+	} else {
+		*this = (*this &^ iFields[index].mask) | (word(value) << iFields[index].shift)
+		return nil
+	}
+}
+func (this instruction) group() byte {
+	return byte(this.getField(fieldControlPrimary) & 0x7)
+}
+func (this instruction) op() byte {
+	return byte((this.getField(fieldControlPrimary) & 0xF8) >> 3)
 }
 
-type DecodedInstruction struct {
-	Group byte
-	Op    byte
-	Data  [3]byte
+func (this *instruction) setGroup(group byte) error {
+	if fld, err := this.getField(fieldControlPrimary); err != nil {
+		return err
+	} else {
+		return this.setField(fieldControlPrimary, (fld&^0x7)|group)
+	}
 }
 
-func (this Instruction) Decode() (*DecodedInstruction, error) {
-	var di DecodedInstruction
-	di.Group = this.group()
-	di.Op = this.op()
-	if value, err := this.register(1); err != nil {
+func (this *instruction) setOp(op byte) error {
+	if fld, err := this.getField(fieldControlPrimary); err != nil {
+		return err
+	} else {
+		return this.setField(fieldControlPrimary, (fld&^0xF8)|(op<<3))
+	}
+}
+
+type decodedInstruction struct {
+	predicate byte
+	group, op byte // one byte encoded
+	control2  byte
+	data      [5]byte
+}
+
+func (this instruction) decode() (*decodedInstruction, error) {
+	var di decodedInstruction
+	di.group = this.group()
+	di.op = this.op()
+	if p, err = this.getField(fieldPredicate); err != nil {
+		return nil, err
+	} else if d0, err := this.getField(fieldControlSecondary); err != nil {
+		return nil, err
+	} else if d1, err := this.getField(fieldDest); err != nil {
+		return nil, err
+	} else if d2, err := this.getField(fieldSrc0); err != nil {
+		return nil, err
+	} else if d3, err := this.getField(fieldSrc1); err != nil {
+		return nil, err
+	} else if d4, err := this.getField(fieldMiscLower); err != nil {
+		return nil, err
+	} else if d5, err := this.getField(fieldMiscUpper); err != nil {
 		return nil, err
 	} else {
-		di.Data[0] = value
+		di.control2 = d0
+		di.data = [5]byte{d1, d2, d3, d4, d5}
+		return &di, nil
 	}
-	if value, err := this.register(2); err != nil {
-		return nil, err
-	} else {
-		di.Data[1] = value
-	}
-	if value, err := this.register(3); err != nil {
-		return nil, err
-	} else {
-		di.Data[2] = value
-	}
-	return &di, nil
 }
 
-func (this *DecodedInstruction) SetImmediate(value Word) {
-	this.Data[1] = byte(value)
-	this.Data[2] = byte(value >> 8)
-}
-func (this *DecodedInstruction) Immediate() Word {
-	return Word((Word(this.Data[2]) << 8) | Word(this.Data[1]))
+var dataTranslationTable = []instructionField{
+	fieldDest,
+	fieldSrc0,
+	fieldSrc1,
+	fieldMiscLower,
+	fieldMiscUpper,
 }
 
-func (this *DecodedInstruction) Encode() *Instruction {
-	i := new(Instruction)
+func (this *decodedInstruction) Encode() (*instruction, error) {
+	var i instruction
 	// encode group
-	i.setGroup(this.Group)
-	i.setOp(this.Op)
-	i.setByte(1, this.Data[0])
-	i.setByte(2, this.Data[1])
-	i.setByte(3, this.Data[2])
-	return i
+	if err := i.setField(fieldPredicate, this.predicate); err != nil {
+		return nil, err
+	} else if err := i.setField(fieldControlSecondary, this.control2); err != nil {
+		return nil, err
+	} else {
+		i.setGroup(this.group)
+		i.setOp(this.op)
+		for x, v := range this.data {
+			if err := i.setField(dataTranslationTable[x], v); err != nil {
+				return nil, err
+			}
+		}
+		return &i, nil
+	}
 }
 
-type IrisError struct {
+type machError struct {
 	value, code uint
 }
 
-func NewError(code, value uint) error {
-	return &IrisError{code: code, value: value}
+func newError(code, value uint) error {
+	return &machError{code: code, value: value}
 }
 
-func (this IrisError) Error() string {
+func (this machError) Error() string {
 	if this.code == 0 {
 		return fmt.Sprintf("No Error with value %d!!! This should never ever showup!", this.value)
 	} else if this.code >= uint(len(errorLookup)) {
@@ -202,110 +258,387 @@ func (this IrisError) Error() string {
 	}
 }
 
-type ExecutionUnit func(*Core, *DecodedInstruction) error
-type SystemCall ExecutionUnit
+type gprReservedRegister byte
+type fprReservedRegister byte
+type predicateReservedRegister byte
 
-type Core struct {
-	gpr   [RegisterCount - UserRegisterBegin]Word
-	code  [MemorySize]Instruction
-	data  [MemorySize]Word
-	ucode [MemorySize]Word
-	stack [MemorySize]Word
-	call  [MemorySize]Word
+const (
+	// reserved registers
+	gprZeroRegister gprReservedRegister = iota
+	gprOneRegister
+	gprInstructionPointer
+	gprStackPointer
+	gprCallPointer
+	userGPRRegisterBegin
+)
+
+const (
+	predicateTrueRegister predicateReservedRegister = iota
+	predicateFalseRegister
+
+	userPredicateRegisterBegin
+)
+
+const (
+	fprZeroRegister fprReservedRegister = iota
+	fprOneRegister
+
+	userFprRegisterBegin
+)
+
+type registerSegment byte
+
+const (
+	rsGPR registerSegment = iota
+	rsFPR
+	rsPredicate
+	rsCount
+)
+
+type ExecutionUnit func(*core, *DecodedInstruction) error
+type SystemCall ExecutionUnit
+type codeMemorySegment []instruction
+type wordMemorySegment []word
+
+func (this codeMemorySegment) Set(a, v dataAbstraction) error {
+	if addr, err := a.Int(); err != nil {
+		return err
+	} else if value, err := a.Instruction(); err != nil {
+		return err
+	} else if addr >= len(this) {
+		return fmt.Errorf("Can't store %x in illegal address %x", value, addr)
+	} else {
+		this[addr] = value
+		return nil
+	}
+}
+func (this codeMemorySegment) Get(a dataAbstraction) (dataAbstraction, error) {
+	if addr, err := a.Int(); err != nil {
+		return 0, err
+	} else if addr >= len(this) {
+		return fmt.Errorf("Can't read from %x", addr)
+	} else {
+		return this[addr], nil
+	}
+}
+
+func (this wordMemorySegment) Set(a, v dataAbstraction) error {
+	if addr, err := a.Int(); err != nil {
+		return err
+	} else if value, err := a.Int(); err != nil {
+		return err
+	} else if addr >= len(this) {
+		return fmt.Errorf("Can't store %x in illegal address %x", value, addr)
+	} else {
+		this[addr] = value
+		return nil
+	}
+}
+func (this wordMemorySegment) Get(a dataAbstraction) (dataAbstraction, error) {
+	if addr, err := a.Int(); err != nil {
+		return 0, err
+	} else if addr >= len(this) {
+		return fmt.Errorf("Can't read from %x", addr)
+	} else {
+		return this[addr], nil
+	}
+}
+
+type segmentAbstraction interface {
+	Set(address, value dataAbstraction) error
+	Get(address dataAbstraction) (dataAbstraction, error)
+}
+type core struct {
+	gpr                      [generalPurposeRegisterCount - userGPRRegisterBegin]word
+	fpr                      [floatRegisterCount - userFprRegisterBegin]floatWord
+	predicates               [predicateRegisterCount - userPredicateRegisterBegin]predicate
+	code                     codeMemorySegment
+	data, ucode, stack, call wordMemorySegment
+	//code       [codeMemorySize]instruction
+	//	data       [dataMemorySize]word
+	//	ucode      [microcodeMemorySize]word
+	//	stack      [stackMemorySize]word
+	//	call       [callMemorySize]word
 	// internal registers that should be easy to find
-	instructionPointer Word
-	stackPointer       Word
-	callPointer        Word
-	predicate          Word
+	instructionPointer halfWord
+	stackPointer       word
+	callPointer        word
 	advancePc          bool
 	terminateExecution bool
 	groups             [MajorOperationGroupCount]ExecutionUnit
 	systemCalls        [SystemCallCount]SystemCall
 }
 
-func (this *Core) SetRegister(index byte, value Word) error {
-	switch index {
-	case FalseRegister:
-		return NewError(ErrorWriteToFalseRegister, uint(value))
-	case TrueRegister:
-		return NewError(ErrorWriteToTrueRegister, uint(value))
-	case InstructionPointer:
-		this.instructionPointer = value
-	case StackPointer:
-		this.stackPointer = value
-	case PredicateRegister:
-		this.predicate = value
-	case CallPointer:
-		this.callPointer = value
-	default:
-		this.gpr[index-UserRegisterBegin] = value
+func (this *core) setFloatRegister(index fprReservedRegister, value floatWord) error {
+	if index >= floatRegisterCount {
+		return fmt.Errorf("Index %d is out of range for the given set of floating point registers!", index)
+	} else {
+		switch index {
+		case fprZeroRegister:
+			return newError(errorWriteToFloatZeroRegister, value)
+		case fprOneRegister:
+			return newError(errorWriteToFloatOneRegister, value)
+		default:
+			this.fpr[index-userFprRegisterBegin] = value
+			return nil
+		}
 	}
-	return nil
 }
-func (this *Core) Register(index byte) Word {
-	switch index {
-	case FalseRegister:
-		return 0
-	case TrueRegister:
-		return 1
-	case InstructionPointer:
-		return this.instructionPointer
-	case StackPointer:
-		return this.stackPointer
-	case PredicateRegister:
-		return this.predicate
-	case CallPointer:
-		return this.callPointer
-	default:
-		// do the offset calculation
-		return this.gpr[index-UserRegisterBegin]
+func (this *core) setPredicateRegister(index predicateReservedRegister, value predicate) error {
+	if index >= predicateRegisterCount {
+		return fmt.Errorf("Index %d is out of range for the given set of predicate registers!", index)
+	} else {
+		switch index {
+		case trueRegister:
+			return newError(errorWriteToTrueRegister, value)
+		case falseRegister:
+			return newError(errorWriteToFalseRegister, value)
+		default:
+			this.predicates[index-userPredicateRegisterBegin] = value
+			return nil
+		}
+	}
+}
+func (this *core) setGPRRegister(index gprReservedRegister, value Word) error {
+	if index >= generalPurposeRegisterCount {
+		return fmt.Errorf("Index %d is out of range for the given set of GPRs!", index)
+	} else {
+		switch index {
+		case gprZeroRegister:
+			return newError(errorWriteToIntZeroRegister, uint(value))
+		case gprOneRegister:
+			return newError(errorWriteToIntOneRegister, uint(value))
+		case gprInstructionPointer:
+			this.instructionPointer = value
+		case gprStackPointer:
+			this.stackPointer = value
+		case gprCallPointer:
+			this.callPointer = value
+		default:
+			this.gpr[index-userGPRRegisterBegin] = value
+		}
+		return nil
 	}
 }
 
-func (this *Core) CodeMemory(address Word) Instruction {
-	return this.code[address]
+type dataAbstraction interface {
+	Float() (floatWord, error)
+	Int() (word, error)
+	Bool() (predicate, error)
+	Instruction() (instruction, error)
 }
-func (this *Core) SetCodeMemory(address Word, value Instruction) error {
-	this.code[address] = value
-	return nil
+
+func (this word) Float() (floatWord, error) {
+	return floatWord(math.Float64frombits(this)), nil
 }
-func (this *Core) Call(addr Word) error {
+func (this word) Int() (word, error) {
+	return this, nil
+}
+func (this word) Bool() (predicate, error) {
+	return predicate(word != 0), nil
+}
+
+func (this word) Instruction() (instruction, error) {
+	return instruction(this), nil
+}
+
+func (this floatWord) Float() (floatWord, error) {
+	return this, nil
+}
+func (this floatWord) Int() (word, error) {
+	return word(math.Float64bits(this)), nil
+}
+func (this floatWord) Bool() (predicate, error) {
+	return 0.0, fmt.Errorf("This is a floatWord, not a predicate. Implicit conversion will not take place due to precision issues!")
+}
+
+func (this floatWord) Instruction() (instruction, error) {
+	return instruction(math.Float64bits(this)), nil
+}
+
+func (this predicate) Float() (floatWord, error) {
+	return 0.0, fmt.Errorf("This is a predicate, not a floatWord. Implicit conversion will not take place due to precision issues!")
+}
+func (this predicate) Int() (word, error) {
+	if this {
+		return word(1), nil
+	} else {
+		return word(0), nil
+	}
+}
+func (this predicate) Bool() (predicate, error) {
+	return this, nil
+}
+func (this predicate) Instruction() (instruction, error) {
+	if this {
+		return instruction(1), nil
+	} else {
+		return instruction(0), nil
+	}
+}
+
+func (this *core) setRegister(seg registerSegment, index byte, value dataAbstraction) error {
+	switch seg {
+	case rsGPR:
+		if val, err := value.Int(); err != nil {
+			return err
+		} else {
+			return this.setGPRRegister(gprReservedRegister(index), val)
+		}
+	case rsFPR:
+		if val, err := value.Float(); err != nil {
+			return err
+		} else {
+			return this.setFloatRegister(fprReservedRegister, val)
+		}
+	case rsPredicate:
+		if val, err := value.Bool(); err != nil {
+			return err
+		} else {
+			return this.setPredicateRegister(predicateReservedRegister(index), val)
+		}
+	default:
+		return fmt.Errorf("Attempted to access illegal registerSegment %d!", seg)
+	}
+}
+func (this *core) register(seg registerSegment, index byte) (dataAbstraction, error) {
+	switch seg {
+	case rsGPR:
+		return this.gprRegister(gprReservedRegister(index))
+	case rsFPR:
+		return this.fprRegister(fprReservedRegister(index))
+	case rsPredicate:
+		return this.predicateRegister(predicateReservedRegister(index))
+	default:
+		return word(0), fmt.Errorf("Attempted to access illegal registerSegment %d!", seg)
+	}
+}
+
+func (this *core) gprRegister(index gprReservedRegister) (word, error) {
+	if index >= generalPurposeRegisterCount {
+		return 0, fmt.Errorf("%d is out of range for a GPR!", index)
+	} else {
+		switch index {
+		case gprZeroRegister:
+			return 0, nil
+		case gprOneRegister:
+			return 1, nil
+		case gprInstructionPointer:
+			return this.instructionPointer, nil
+		case gprStackPointer:
+			return this.stackPointer, nil
+		case gprCallPointer:
+			return this.callPointer, nil
+		default:
+			// do the offset calculation
+			return this.gpr[index-userGPRRegisterBegin], nil
+		}
+	}
+}
+func (this *core) fprRegister(index fprReservedRegister) (floatWord, error) {
+	if index >= floatRegisterCount {
+		return 0, fmt.Errorf("%d is out of range for a FPR!", index)
+	} else {
+		switch index {
+		case fprZeroRegister:
+			return 0.0, nil
+		case fprOneRegister:
+			return 1.0, nil
+		default:
+			// do the offset calculation
+			return this.fpr[index-userFprRegisterBegin], nil
+		}
+	}
+}
+
+func (this *core) predicateRegister(index predicateReservedRegister) (predicate, error) {
+	if index >= predicateRegisterCount {
+		return 0, fmt.Errorf("%d is out of range for a predicate!", index)
+	} else {
+		switch index {
+		case predicateTrueRegister:
+			return true, nil
+		case predicateFalseRegister:
+			return false, nil
+		default:
+			// do the offset calculation
+			return this.predicates[index-userPredicateRegisterBegin], nil
+		}
+	}
+}
+func (this *core) wordSegment(seg segment) ([]word, error) {
+	switch seg {
+	case codeSegment:
+		return nil, fmt.Errorf("The code segment is an instruction segment, not a word segment!")
+	case dataSegment:
+		return this.data, nil
+	case microcodeSegment:
+		return this.ucode, nil
+	case callSegment:
+		return this.call, nil
+	case stackSegment:
+		return this.stack, nil
+	default:
+		return nil, fmt.Errorf("Illegal code segment %d", seg)
+	}
+}
+func setWordMemory(seg segment, addr, value word, mem []word) error {
+	if addr >= seg.Size() {
+		return fmt.Errorf("Attempted to write %x to address %x is outside legal memory bounds of the %s memory segment!", value, addr, seg.String())
+	} else {
+		mem[addr] = value
+		return nil
+	}
+}
+func getWordMemory(seg segment, addr word, mem []word) (word, error) {
+	if addr >= seg.Size() {
+		return fmt.Errorf("Attempted to read from address %x which is outside legal memory bounds of the %s memory segment!", addr, seg.String())
+	} else {
+		return mem[addr], nil
+	}
+}
+func (this *core) setMemory(seg segment, addr, value word) error {
+	switch seg {
+	case codeSegment:
+		if addr >= seg.Size() {
+			return fmt.Errorf("Address %x is outside legal memory bounds of the code memory segment!", addr)
+		} else {
+			this.code[addr] = instruction(value)
+			return nil
+		}
+	case dataSegment, microcodeSegment, callSegment, stackSegment:
+		if mem, err := this.wordSegment(seg); err != nil {
+			return err
+		} else {
+			return setWordMemory(seg, addr, value, mem)
+		}
+	default:
+		return fmt.Errorf("Attempted to write %x to address %x in %s memory segment", value, addr, seg.String())
+	}
+}
+func (this *core) memory(seg segment, addr word) error {
+}
+func (this *core) Call(addr Word) error {
 	this.callPointer++
 	this.call[this.callPointer] = this.NextInstructionAddress()
-	return this.SetRegister(InstructionPointer, addr)
+	return this.SetRegister(instructionPointer, addr)
 }
-func (this *Core) Return() Word {
+func (this *core) Return() Word {
 	value := this.call[this.callPointer]
 	this.callPointer--
 	return value
 }
-func (this *Core) Push(value Word) {
+func (this *core) Push(value Word) {
 	this.stackPointer++
 	this.stack[this.stackPointer] = value
 }
-func (this *Core) Peek() Word {
+func (this *core) Peek() Word {
 	return this.stack[this.stackPointer]
 }
-func (this *Core) Pop() Word {
+func (this *core) Pop() Word {
 	value := this.stack[this.stackPointer]
 	this.stackPointer--
 	return value
-}
-func (this *Core) DataMemory(address Word) Word {
-	return this.data[address]
-}
-func (this *Core) SetDataMemory(address, value Word) error {
-	this.data[address] = value
-	return nil
-}
-
-func (this *Core) MicrocodeMemory(address Word) Word {
-	return this.ucode[address]
-}
-
-func (this *Core) SetMicrocodeMemory(address, value Word) error {
-	this.ucode[address] = value
-	return nil
 }
 
 var defaultExecutionUnits = []struct {
@@ -319,11 +652,11 @@ var defaultExecutionUnits = []struct {
 	{Group: InstructionGroupMisc, Unit: misc},
 }
 
-func New() (*Core, error) {
-	var c Core
+func newCore() (*core, error) {
+	var c core
 	c.advancePc = true
 	c.terminateExecution = false
-	if err := c.SetRegister(InstructionPointer, 0); err != nil {
+	if err := c.SetRegister(instructionPointer, 0); err != nil {
 		return nil, err
 	} else if err := c.SetRegister(PredicateRegister, 0); err != nil {
 		return nil, err
@@ -353,26 +686,26 @@ func New() (*Core, error) {
 	return &c, nil
 }
 
-func (this *Core) InstallExecutionUnit(group byte, fn ExecutionUnit) error {
+func (this *core) InstallExecutionUnit(group byte, fn ExecutionUnit) error {
 	if group >= MajorOperationGroupCount {
-		return NewError(ErrorGroupValueOutOfRange, uint(group))
+		return newError(ErrorGroupValueOutOfRange, uint(group))
 	} else {
 		this.groups[group] = fn
 		return nil
 	}
 }
-func (this *Core) Invoke(inst *DecodedInstruction) error {
+func (this *core) Invoke(inst *DecodedInstruction) error {
 	return this.groups[inst.Group](this, inst)
 }
-func (this *Core) InstallSystemCall(offset byte, fn SystemCall) error {
+func (this *core) InstallSystemCall(offset byte, fn SystemCall) error {
 	this.systemCalls[offset] = fn
 	return nil
 }
-func (this *Core) SystemCall(inst *DecodedInstruction) error {
+func (this *core) SystemCall(inst *DecodedInstruction) error {
 	return this.systemCalls[inst.Data[0]](this, inst)
 }
 
-func (this *Core) Dispatch(inst Instruction) error {
+func (this *core) Dispatch(inst instruction) error {
 	this.advancePc = true
 	if di, err := inst.Decode(); err != nil {
 		return err
@@ -381,26 +714,26 @@ func (this *Core) Dispatch(inst Instruction) error {
 	}
 }
 
-func (this *Core) ShouldExecute() bool {
+func (this *core) ShouldExecute() bool {
 	return this.terminateExecution
 }
-func (this *Core) HaltExecution() {
+func (this *core) HaltExecution() {
 	this.terminateExecution = true
 }
-func (this *Core) ResumeExecution() {
+func (this *core) ResumeExecution() {
 	this.terminateExecution = false
 }
-func defaultExtendedUnit(core *Core, inst *DecodedInstruction) error {
-	return NewError(ErrorInvalidInstructionGroupProvided, uint(inst.Group))
+func defaultExtendedUnit(core *core, inst *DecodedInstruction) error {
+	return newError(ErrorInvalidInstructionGroupProvided, uint(inst.Group))
 }
 
-func (this *Core) InstructionAddress() Word {
-	return this.Register(InstructionPointer)
+func (this *core) instructionAddress() Word {
+	return this.Register(instructionPointer)
 }
-func (this *Core) NextInstructionAddress() Word {
-	return this.Register(InstructionPointer) + 1
+func (this *core) NextInstructionAddress() Word {
+	return this.Register(instructionPointer) + 1
 }
-func (this *Core) PredicateValue(index byte) bool {
+func (this *core) PredicateValue(index byte) bool {
 	return this.Register(index) != 0
 }
 
@@ -421,17 +754,17 @@ func NewDecodedInstructionImmediate(group, op, data0 byte, imm Word) (*DecodedIn
 	return NewDecodedInstruction(group, op, data0, byte(imm), byte(imm>>8))
 }
 
-func (this *Core) TerminateExecution() bool {
+func (this *core) TerminateExecution() bool {
 	return this.terminateExecution
 }
 
-func (this *Core) CurrentInstruction() Instruction {
-	return this.code[this.Register(InstructionPointer)]
+func (this *core) CurrentInstruction() instruction {
+	return this.code[this.Register(instructionPointer)]
 }
 
-func (this *Core) AdvanceProgramCounter() error {
+func (this *core) AdvanceProgramCounter() error {
 	if this.advancePc {
-		if err := this.SetRegister(InstructionPointer, this.NextInstructionAddress()); err != nil {
+		if err := this.SetRegister(instructionPointer, this.NextInstructionAddress()); err != nil {
 			return err
 		}
 	} else {
@@ -440,11 +773,11 @@ func (this *Core) AdvanceProgramCounter() error {
 	return nil
 }
 
-func (this *Core) ExecuteCurrentInstruction() error {
+func (this *core) ExecuteCurrentInstruction() error {
 	return this.Dispatch(this.CurrentInstruction())
 }
 
-func (this *Core) Run() error {
+func (this *core) Run() error {
 	for !this.TerminateExecution() {
 		if err := this.ExecuteCurrentInstruction(); err != nil {
 			return fmt.Errorf("ERROR during execution: %s\n", err)
@@ -455,30 +788,15 @@ func (this *Core) Run() error {
 	return nil
 }
 
-func (this *Core) GetDebugStatus() bool {
+func (this *core) GetDebugStatus() bool {
 	return false
 }
 
-func (this *Core) SetDebug(_ bool) {
+func (this *core) SetDebug(_ bool) {
 
 }
 
-const (
-	sixteenBitMemory      = 65536
-	instructionMemorySize = sixteenBitMemory * 4
-	dataMemorySize        = sixteenBitMemory * 2
-)
-
-func readWord(input <-chan byte) (Word, error) {
-	if value, more := <-input; !more {
-		return 0, fmt.Errorf("Closed stream 0")
-	} else if value1, more0 := <-input; !more0 {
-		return 0, fmt.Errorf("Closed stream 1")
-	} else {
-		return Word(binary.LittleEndian.Uint16([]byte{value, value1})), nil
-	}
-}
-func readInstruction(input <-chan byte) (Instruction, error) {
+func readWord(input <-chan byte) (word, error) {
 	if value, more := <-input; !more {
 		// closed early it seems :(
 		return 0, fmt.Errorf("Closed stream")
@@ -488,41 +806,49 @@ func readInstruction(input <-chan byte) (Instruction, error) {
 		return 0, fmt.Errorf("Closed stream")
 	} else if value4, more2 := <-input; !more2 {
 		return 0, fmt.Errorf("Closed stream")
+	} else if value5, more3 := <-input; !more3 {
+		return 0, fmt.Errorf("Closed stream")
+	} else if value6, more4 := <-input; !more4 {
+		return 0, fmt.Errorf("Closed stream")
+	} else if value7, more5 := <-input; !more5 {
+		return 0, fmt.Errorf("Closed stream")
+	} else if value8, more6 := <-input; !more6 {
+		return 0, fmt.Errorf("Closed stream")
 	} else {
-		return Instruction(binary.LittleEndian.Uint32([]byte{value, value2, value3, value4})), nil
+		return binary.LittleEndian.Uint64([]byte{value, value2, value3, value4, value5, value6, value7, value8}), nil
 	}
 
 }
-func (this *Core) InstallProgram(input <-chan byte) error {
-	for i := 0; i < MemorySize; i++ {
-		if inst, err := readInstruction(input); err != nil {
+func (this *core) InstallProgram(input <-chan byte) error {
+	for i := 0; i < codeMemorySize; i++ {
+		if inst, err := readWord(input); err != nil {
 			return err
 		} else {
-			this.code[i] = inst
+			this.code[i] = instruction(inst)
 		}
 	}
-	for i := 0; i < MemorySize; i++ {
+	for i := 0; i < dataMemorySize; i++ {
 		if inst, err := readWord(input); err != nil {
 			return err
 		} else {
 			this.data[i] = inst
 		}
 	}
-	for i := 0; i < MemorySize; i++ {
+	for i := 0; i < microcodeMemorySize; i++ {
 		if inst, err := readWord(input); err != nil {
 			return err
 		} else {
 			this.ucode[i] = inst
 		}
 	}
-	for i := 0; i < MemorySize; i++ {
+	for i := 0; i < stackMemorySize; i++ {
 		if inst, err := readWord(input); err != nil {
 			return err
 		} else {
 			this.stack[i] = inst
 		}
 	}
-	for i := 0; i < MemorySize; i++ {
+	for i := 0; i < callMemorySize; i++ {
 		if inst, err := readWord(input); err != nil {
 			return err
 		} else {
@@ -532,45 +858,45 @@ func (this *Core) InstallProgram(input <-chan byte) error {
 	return nil
 }
 
-func (this *Core) Dump(output chan<- byte) error {
-	inst, word := make([]byte, 4), make([]byte, 2)
+func (this *core) Dump(output chan<- byte) error {
+	w := make([]byte, 8)
 	for _, dat := range this.code {
-		binary.LittleEndian.PutUint32(inst, uint32(dat))
-		for _, v := range inst {
+		binary.LittleEndian.PutUint32(w, uint64(dat))
+		for _, v := range w {
 			output <- v
 		}
 	}
 	for _, dat := range this.data {
-		binary.LittleEndian.PutUint16(word, uint16(dat))
-		for _, v := range word {
+		binary.LittleEndian.PutUint16(w, uint64(dat))
+		for _, v := range w {
 			output <- v
 		}
 	}
 	for _, dat := range this.ucode {
-		binary.LittleEndian.PutUint16(word, uint16(dat))
-		for _, v := range word {
+		binary.LittleEndian.PutUint16(w, uint64(dat))
+		for _, v := range w {
 			output <- v
 		}
 	}
 	for _, val := range this.stack {
-		binary.LittleEndian.PutUint16(word, uint16(val))
-		for _, b := range word {
+		binary.LittleEndian.PutUint16(w, uint64(val))
+		for _, b := range w {
 			output <- b
 		}
 	}
 	for _, val := range this.call {
-		binary.LittleEndian.PutUint16(word, uint16(val))
-		for _, b := range word {
+		binary.LittleEndian.PutUint16(w, uint64(val))
+		for _, b := range w {
 			output <- b
 		}
 	}
 	return nil
 }
 
-func (this *Core) Startup() error {
+func (this *core) Startup() error {
 	return nil
 }
-func (this *Core) Shutdown() error {
+func (this *core) Shutdown() error {
 	return nil
 }
 
@@ -590,26 +916,40 @@ func init() {
 		panic("Too many memory segments described!")
 	}
 }
-func (this segment) acceptsDwords() bool {
-	return this == codeSegment
-}
 func (this segment) acceptsWords() bool {
 	return this == dataSegment || this == microcodeSegment || this == stackSegment || this == callSegment
 }
 
-func (this *Core) StackMemory(address Word) Word {
-	return this.ucode[address]
+func (this segment) String() string {
+	switch this {
+	case codeSegment:
+		return "code"
+	case stackSegment:
+		return "stack"
+	case dataSegment:
+		return "data"
+	case microcodeSegment:
+		return "microcode"
+	case callSegment:
+		return "call"
+	default:
+		return fmt.Sprintf("unknown(%d)", this)
+	}
 }
 
-func (this *Core) SetStackMemory(address, value Word) error {
-	this.stack[address] = value
-	return nil
-}
-func (this *Core) CallMemory(address Word) Word {
-	return this.ucode[address]
-}
-
-func (this *Core) SetCallMemory(address, value Word) error {
-	this.call[address] = value
-	return nil
+func (this segment) Size() word {
+	switch this {
+	case codeSegment:
+		return codeMemorySize
+	case dataSegment:
+		return dataMemorySize
+	case microcodeSegment:
+		return microcodeMemorySize
+	case stackSegment:
+		return stackMemorySize
+	case callSegment:
+		return callMemorySize
+	default:
+		return 0
+	}
 }

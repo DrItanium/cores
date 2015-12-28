@@ -84,7 +84,7 @@ func (this *branchBits) setIfThenElseForm(value bool) {
 	this.setBit(branchBitIfThenElseForm, value)
 }
 
-func branch(core *Core, addr Word, call bool) error {
+func branch(core *Core, addr word, call bool) error {
 	core.advancePc = false
 	if call {
 		return core.Call(addr)
@@ -93,7 +93,7 @@ func branch(core *Core, addr Word, call bool) error {
 	}
 }
 func uncondOp(core *Core, call, ret, imm bool, inst *DecodedInstruction) error {
-	var addr Word
+	var addr word
 	if ret {
 		if imm {
 			return fmt.Errorf("A return instruction combined with an immediate makes no sense")
@@ -142,7 +142,7 @@ func ifThenElseOp(core *Core, call, ret, imm bool, inst *DecodedInstruction) err
 		return fmt.Errorf("Can't mix return instructions and the if then else form")
 	} else {
 		// extract the predicate condition
-		var addr Word
+		var addr word
 		if core.Register(inst.Data[0]) == 1 {
 			addr = core.Register(inst.Data[1])
 		} else {

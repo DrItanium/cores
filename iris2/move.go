@@ -80,7 +80,7 @@ func moveOpSet(core *Core, inst *DecodedInstruction) error {
 	return core.SetRegister(dest, inst.Immediate())
 }
 func load(core *Core, inst *DecodedInstruction) error {
-	var val Word
+	var val word
 	dest, addr, seg := inst.Data[0], core.Register(inst.Data[1]), segment(inst.Data[2])
 	switch seg {
 	case dataSegment:
