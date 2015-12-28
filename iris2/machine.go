@@ -3,10 +3,17 @@ package iris2
 
 import (
 	"encoding/binary"
+	"flag"
 	"fmt"
 	"github.com/DrItanium/cores/registration/machine"
 	"math"
 )
+
+var arg_dataMemorySize = flag.Uint64("iris2.dataSegmentSize", dataMemorySize, "The size of the data segment")
+var arg_codeMemorySize = flag.Uint64("iris2.codeSegmentSize", codeMemorySize, "The size of the code segment")
+var arg_microcodeMemorySize = flag.Uint64("iris2.microcodeSegmentSize", microcodeMemorySize, "The size of the microcode segment")
+var arg_stackMemorySize = flag.Uint64("iris2.stackSegmentSize", stackMemorySize, "The size of the stack segment")
+var arg_callMemorySize = flag.Uint64("iris2.callSegmentSize", callMemorySize, "The size of the call segment")
 
 func RegistrationName() string {
 	return "iris2"
@@ -101,6 +108,62 @@ type dword [2]uint64
 type floatWord float64
 type instruction word
 type instructionField byte
+
+type dataAbstraction interface {
+	Float() (floatWord, error)
+	Int() (word, error)
+	Bool() (predicate, error)
+	Instruction() (instruction, error)
+}
+
+func (this word) Float() (floatWord, error) {
+	return floatWord(math.Float64frombits(this)), nil
+}
+func (this word) Int() (word, error) {
+	return this, nil
+}
+func (this word) Bool() (predicate, error) {
+	return predicate(word != 0), nil
+}
+
+func (this word) Instruction() (instruction, error) {
+	return instruction(this), nil
+}
+
+func (this floatWord) Float() (floatWord, error) {
+	return this, nil
+}
+func (this floatWord) Int() (word, error) {
+	return word(math.Float64bits(this)), nil
+}
+func (this floatWord) Bool() (predicate, error) {
+	return 0.0, fmt.Errorf("This is a floatWord, not a predicate. Implicit conversion will not take place due to precision issues!")
+}
+
+func (this floatWord) Instruction() (instruction, error) {
+	return instruction(math.Float64bits(this)), nil
+}
+
+func (this predicate) Float() (floatWord, error) {
+	return 0.0, fmt.Errorf("This is a predicate, not a floatWord. Implicit conversion will not take place due to precision issues!")
+}
+func (this predicate) Int() (word, error) {
+	if this {
+		return word(1), nil
+	} else {
+		return word(0), nil
+	}
+}
+func (this predicate) Bool() (predicate, error) {
+	return this, nil
+}
+func (this predicate) Instruction() (instruction, error) {
+	if this {
+		return instruction(1), nil
+	} else {
+		return instruction(0), nil
+	}
+}
 
 const (
 	fieldPredicate instructionField = iota
@@ -295,10 +358,15 @@ const (
 	rsCount
 )
 
-type ExecutionUnit func(*core, *DecodedInstruction) error
+type ExecutionUnit func(*core, *decodedInstruction) error
 type SystemCall ExecutionUnit
 type codeMemorySegment []instruction
 type wordMemorySegment []word
+
+type segmentAbstraction interface {
+	Set(address, value dataAbstraction) error
+	Get(address dataAbstraction) (dataAbstraction, error)
+}
 
 func (this codeMemorySegment) Set(a, v dataAbstraction) error {
 	if addr, err := a.Int(); err != nil {
@@ -344,29 +412,19 @@ func (this wordMemorySegment) Get(a dataAbstraction) (dataAbstraction, error) {
 	}
 }
 
-type segmentAbstraction interface {
-	Set(address, value dataAbstraction) error
-	Get(address dataAbstraction) (dataAbstraction, error)
-}
 type core struct {
 	gpr                      [generalPurposeRegisterCount - userGPRRegisterBegin]word
 	fpr                      [floatRegisterCount - userFprRegisterBegin]floatWord
 	predicates               [predicateRegisterCount - userPredicateRegisterBegin]predicate
 	code                     codeMemorySegment
 	data, ucode, stack, call wordMemorySegment
-	//code       [codeMemorySize]instruction
-	//	data       [dataMemorySize]word
-	//	ucode      [microcodeMemorySize]word
-	//	stack      [stackMemorySize]word
-	//	call       [callMemorySize]word
 	// internal registers that should be easy to find
-	instructionPointer halfWord
-	stackPointer       word
-	callPointer        word
-	advancePc          bool
-	terminateExecution bool
-	groups             [MajorOperationGroupCount]ExecutionUnit
-	systemCalls        [SystemCallCount]SystemCall
+	instructionPointer            halfWord
+	stackPointer                  word
+	callPointer                   word
+	advancePc, terminateExecution bool
+	groups                        [MajorOperationGroupCount]ExecutionUnit
+	systemCalls                   [SystemCallCount]SystemCall
 }
 
 func (this *core) setFloatRegister(index fprReservedRegister, value floatWord) error {
@@ -418,62 +476,6 @@ func (this *core) setGPRRegister(index gprReservedRegister, value Word) error {
 			this.gpr[index-userGPRRegisterBegin] = value
 		}
 		return nil
-	}
-}
-
-type dataAbstraction interface {
-	Float() (floatWord, error)
-	Int() (word, error)
-	Bool() (predicate, error)
-	Instruction() (instruction, error)
-}
-
-func (this word) Float() (floatWord, error) {
-	return floatWord(math.Float64frombits(this)), nil
-}
-func (this word) Int() (word, error) {
-	return this, nil
-}
-func (this word) Bool() (predicate, error) {
-	return predicate(word != 0), nil
-}
-
-func (this word) Instruction() (instruction, error) {
-	return instruction(this), nil
-}
-
-func (this floatWord) Float() (floatWord, error) {
-	return this, nil
-}
-func (this floatWord) Int() (word, error) {
-	return word(math.Float64bits(this)), nil
-}
-func (this floatWord) Bool() (predicate, error) {
-	return 0.0, fmt.Errorf("This is a floatWord, not a predicate. Implicit conversion will not take place due to precision issues!")
-}
-
-func (this floatWord) Instruction() (instruction, error) {
-	return instruction(math.Float64bits(this)), nil
-}
-
-func (this predicate) Float() (floatWord, error) {
-	return 0.0, fmt.Errorf("This is a predicate, not a floatWord. Implicit conversion will not take place due to precision issues!")
-}
-func (this predicate) Int() (word, error) {
-	if this {
-		return word(1), nil
-	} else {
-		return word(0), nil
-	}
-}
-func (this predicate) Bool() (predicate, error) {
-	return this, nil
-}
-func (this predicate) Instruction() (instruction, error) {
-	if this {
-		return instruction(1), nil
-	} else {
-		return instruction(0), nil
 	}
 }
 
@@ -652,37 +654,51 @@ var defaultExecutionUnits = []struct {
 	{Group: InstructionGroupMisc, Unit: misc},
 }
 
+var systemCalls = []struct {
+	Op byte
+	fn SystemCall
+}{
+	{Op: SystemCallTerminate, fn: terminateSystemCall},
+	{Op: SystemCallPanic, fn: panicSystemCall},
+	{Op: SystemCallPutc, fn: putcSystemCall},
+}
+
 func newCore() (*core, error) {
 	var c core
 	c.advancePc = true
 	c.terminateExecution = false
-	if err := c.SetRegister(instructionPointer, 0); err != nil {
-		return nil, err
-	} else if err := c.SetRegister(PredicateRegister, 0); err != nil {
-		return nil, err
-	} else if err := c.SetRegister(StackPointer, 0xFFFF); err != nil {
-		return nil, err
-	} else if err := c.SetRegister(CallPointer, 0xFFFF); err != nil {
+	c.data = make(wordMemorySegment, *arg_dataMemorySize)
+	c.code = make(codeMemorySegment, *arg_codeMemorySize)
+	c.ucode = make(wordMemorySegment, *arg_microcodeMemorySize)
+	c.stack = make(wordMemorySegment, *arg_stackMemorySize)
+	c.call = make(wordMemorySegment, *arg_callMemorySize)
+	if err := c.setRegister(gprInstructionPointer, 0); err != nil {
 		return nil, err
 	}
+	// install default handlers
 	for i := 0; i < MajorOperationGroupCount; i++ {
 		if err := c.InstallExecutionUnit(byte(i), defaultExtendedUnit); err != nil {
 			return nil, err
 		}
 	}
+	// overwrite with real execution units
 	for _, unit := range defaultExecutionUnits {
 		if err := c.InstallExecutionUnit(unit.Group, unit.Unit); err != nil {
 			return nil, err
 		}
 	}
+	// install default system calls
 	for i := 0; i < SystemCallCount; i++ {
 		if err := c.InstallSystemCall(byte(i), defaultSystemCall); err != nil {
 			return nil, err
 		}
 	}
-	c.InstallSystemCall(SystemCallTerminate, terminateSystemCall)
-	c.InstallSystemCall(SystemCallPanic, panicSystemCall)
-	c.InstallSystemCall(SystemCallPutc, putcSystemCall)
+	// overwrite
+	for _, s := range systemCalls {
+		if err := c.InstallSystemCall(s.Op, s.fn); err != nil {
+			return nil, err
+		}
+	}
 	return &c, nil
 }
 
@@ -694,94 +710,56 @@ func (this *core) InstallExecutionUnit(group byte, fn ExecutionUnit) error {
 		return nil
 	}
 }
-func (this *core) Invoke(inst *DecodedInstruction) error {
+func (this *core) invoke(inst *decodedInstruction) error {
 	return this.groups[inst.Group](this, inst)
 }
 func (this *core) InstallSystemCall(offset byte, fn SystemCall) error {
 	this.systemCalls[offset] = fn
 	return nil
 }
-func (this *core) SystemCall(inst *DecodedInstruction) error {
+func (this *core) SystemCall(inst *decodedInstruction) error {
 	return this.systemCalls[inst.Data[0]](this, inst)
 }
 
-func (this *core) Dispatch(inst instruction) error {
-	this.advancePc = true
-	if di, err := inst.Decode(); err != nil {
-		return err
-	} else {
-		return this.Invoke(di)
-	}
-}
-
-func (this *core) ShouldExecute() bool {
-	return this.terminateExecution
-}
-func (this *core) HaltExecution() {
-	this.terminateExecution = true
-}
-func (this *core) ResumeExecution() {
-	this.terminateExecution = false
-}
-func defaultExtendedUnit(core *core, inst *DecodedInstruction) error {
+func defaultExtendedUnit(core *core, inst *decodedInstruction) error {
 	return newError(ErrorInvalidInstructionGroupProvided, uint(inst.Group))
 }
 
-func (this *core) instructionAddress() Word {
-	return this.Register(instructionPointer)
-}
-func (this *core) NextInstructionAddress() Word {
-	return this.Register(instructionPointer) + 1
-}
-func (this *core) PredicateValue(index byte) bool {
-	return this.Register(index) != 0
-}
-
-func NewDecodedInstruction(group, op, data0, data1, data2 byte) (*DecodedInstruction, error) {
-	if group >= MajorOperationGroupCount {
-		return nil, fmt.Errorf("Provided group (%d) is out of range!", group)
+func (this *core) currentInstruction() (instruction, error) {
+	ip := this.instructionPointer
+	if ip >= codeSegment.size() {
+		// should we chop it or error out....error out since it is safer
+		// jumped outside legal memory
+		return 0, fmt.Errorf("Attempted to load an instruction from address %x outside code segment!", ip)
 	} else {
-		var di DecodedInstruction
-		di.Group = group
-		di.Op = op
-		di.Data[0] = data0
-		di.Data[1] = data1
-		di.Data[2] = data2
-		return &di, nil
+		return this.code[ip], nil
 	}
 }
-func NewDecodedInstructionImmediate(group, op, data0 byte, imm Word) (*DecodedInstruction, error) {
-	return NewDecodedInstruction(group, op, data0, byte(imm), byte(imm>>8))
-}
 
-func (this *core) TerminateExecution() bool {
-	return this.terminateExecution
-}
-
-func (this *core) CurrentInstruction() instruction {
-	return this.code[this.Register(instructionPointer)]
-}
-
-func (this *core) AdvanceProgramCounter() error {
+func (this *core) advanceProgramCounter() error {
 	if this.advancePc {
-		if err := this.SetRegister(instructionPointer, this.NextInstructionAddress()); err != nil {
-			return err
+		value := this.instructionPointer + 1
+		if value >= codeSegment.Size() {
+			value = 0
 		}
+		this.instructionPointer = value
 	} else {
 		this.advancePc = true
 	}
 	return nil
 }
 
-func (this *core) ExecuteCurrentInstruction() error {
-	return this.Dispatch(this.CurrentInstruction())
-}
-
 func (this *core) Run() error {
-	for !this.TerminateExecution() {
-		if err := this.ExecuteCurrentInstruction(); err != nil {
+	for !this.terminateExecution {
+		// extract the current instruction
+		this.advancePc = true
+		if inst, err := this.currentInstruction(); err != nil {
+			return fmt.Errorf("ERROR during extraction of current instruction: %s\n", err)
+		} else if di, err := inst.Decode(); err != nil {
+			return fmt.Errorf("ERROR during decode: %s\n", err)
+		} else if err := this.invoke(di); err != nil {
 			return fmt.Errorf("ERROR during execution: %s\n", err)
-		} else if err := this.AdvanceProgramCounter(); err != nil {
+		} else if err := this.advanceProgramCounter(); err != nil {
 			return fmt.Errorf("ERROR during the advancement of the program counter: %s", err)
 		}
 	}
@@ -940,15 +918,15 @@ func (this segment) String() string {
 func (this segment) Size() word {
 	switch this {
 	case codeSegment:
-		return codeMemorySize
+		return *arg_codeMemorySize
 	case dataSegment:
-		return dataMemorySize
+		return *arg_dataMemorySize
 	case microcodeSegment:
-		return microcodeMemorySize
+		return *arg_microcodeMemorySize
 	case stackSegment:
-		return stackMemorySize
+		return *arg_stackMemorySize
 	case callSegment:
-		return callMemorySize
+		return *arg_callMemorySize
 	default:
 		return 0
 	}
