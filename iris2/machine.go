@@ -106,7 +106,7 @@ type halfWord uint32
 type word uint64
 type dword [2]uint64
 type floatWord float64
-type instruction word
+type instruction [32]byte
 type instructionField byte
 
 type dataAbstraction interface {
