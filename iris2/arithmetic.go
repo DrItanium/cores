@@ -68,6 +68,7 @@ var unimplementedArithmeticOp = ArithmeticOp{
 	ImmediateForm: false,
 	Fn:            unimplementedBinaryOp,
 }
+
 var arithmeticOps = [31]ArithmeticOp{
 	ArithmeticOp{false, func(a, b word) (word, error) { return a + b, nil }},  // add
 	ArithmeticOp{false, func(a, b word) (word, error) { return a - b, nil }},  // sub
@@ -105,6 +106,40 @@ var arithmeticOps = [31]ArithmeticOp{
 func init() {
 	if ArithmeticOpCount > 32 {
 		panic("Too many arithmetic operations defined! Programmer failure!")
+	}
+}
+
+type arithmeticOperandType byte
+
+const (
+	integerRegister arithmeticOperandType = iota
+	floatingRegister
+	immediate8
+	immediate16
+	immediate24
+)
+
+func (this arithmeticOperandType) isRegister() bool {
+	return this == integerRegister || this == floatingRegister
+}
+
+func (this arithmeticOperandType) isImmediate() bool {
+	return this == immediate8 || this == immediate16 || this == immediate24
+}
+func (this arithmeticOperandType) isUnknown() bool {
+	return !this.isRegister() && !this.isImmediate()
+}
+func decodeTypePattern(pattern byte) (arithmeticOperandType, arithmeticOperandType, arithmeticOperandType) {
+	return arithmeticOperandType((pattern & 0x1)), arithmeticOperandType(((pattern >> 1) & 0x1)), arithmeticOperandType((pattern >> 2) & 0x7)
+}
+func arithmetic(core *Core, inst *decodedInstruction) error {
+	destType, src0Type, src1Type := decodeTypePattern(inst.control2)
+	dest, src0 := inst.data[0], inst.data[1]
+	switch destType {
+	case integerRegister:
+	case floatingRegister:
+	default:
+		return fmt.Errorf("Arithmetic destination has an illegal type value!")
 	}
 }
 func arithmetic(core *Core, inst *DecodedInstruction) error {
