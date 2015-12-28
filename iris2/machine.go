@@ -39,7 +39,7 @@ func init() {
 const (
 	generalPurposeRegisterCount = 256
 	floatRegisterCount          = 256
-	predicateRegisterCount      = 256
+	predicateRegisterCount      = 16
 	majorOperationGroupCount    = 8
 	systemCallCount             = 256
 	dataMemorySize              = 268435456 / 8 // 256mb
@@ -711,7 +711,13 @@ func (this *core) InstallExecutionUnit(group byte, fn ExecutionUnit) error {
 	}
 }
 func (this *core) invoke(inst *decodedInstruction) error {
-	return this.groups[inst.Group](this, inst)
+	if p, err := this.predicateRegister(inst.predicate); err != nil {
+		return err
+	} else if p {
+		return this.groups[inst.group](this, inst)
+	} else {
+		return nil
+	}
 }
 func (this *core) InstallSystemCall(offset byte, fn SystemCall) error {
 	this.systemCalls[offset] = fn
