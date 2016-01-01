@@ -64,7 +64,6 @@ const (
 	typeAnd
 	typeOr
 	typeXor
-	typeString
 	// directives
 	typeDirective
 	typeDirectiveData
@@ -75,7 +74,6 @@ const (
 	typeDirectiveMicrocode
 	typeDirectiveCall
 	typeDirectiveStack
-	typeDirectiveString
 	// keywords
 	// memory words
 	keywordSet
@@ -161,28 +159,12 @@ func (this *node) parseLabel(val string) error {
 		this.Type = typeLabel
 		this.Value = nVal
 		// now parse the label as a entirely new node and see if we get a register back
-		nod := node{Value: this.Value, Type: typeId}
-		if err := nod.Parse(); err != nil {
-			switch err.(type) {
-			case *strconv.NumError:
-				j := err.(*strconv.NumError)
-				if j.Err == strconv.ErrRange {
-					return fmt.Errorf("Label %s is interpreted as an out of range value! This is not allowed as it is ambiguous!", this.Value)
-				} else if j.Err == strconv.ErrSyntax {
-					// probably legal, will require an extra pass most likely
-					return fmt.Errorf("Syntax error from strconv (most likely not an error!): %s", j.Err)
-				} else {
-					return err
-				}
-			case *invalidRegisterError:
-				j := err.(*invalidRegisterError)
-				return fmt.Errorf("Label %s is interpreted as an out of range register! This is not allowed as it is ambiguous!", j.Value)
-			default:
-				return fmt.Errorf("Unkown error occurred: %s! Programmer failure!", err)
+		if strings.HasPrefix(nVal, "r") {
+			if _, err := parseRegisterValue(nVal[1:]); err == nil {
+				return fmt.Errorf("Label %s can also be interpreted as a register!", nVal)
 			}
-		} else {
-			return nil
 		}
+		return nil
 	}
 }
 func (this *node) parseHexImmediate(val string) error {
@@ -231,7 +213,6 @@ var directives = map[string]nodeType{
 	"microcode": typeDirectiveMicrocode,
 	"stack":     typeDirectiveStack,
 	"procedure": typeDirectiveCall,
-	"string":    typeDirectiveString,
 }
 
 func (this *node) parseDirective(val string) error {
@@ -304,13 +285,6 @@ func (this *node) Parse() error {
 			// parse keywords first and then other types of symbols
 			// successful match....kinda a hack but it will work
 			return nil
-		} else if strings.HasSuffix(val, "\"") {
-			this.Type = typeString
-			if str, err := strconv.Unquote(val); err != nil {
-				return fmt.Errorf("Couldn't unquote the provided string because: %s", err)
-			} else {
-				this.Value = str
-			}
 		} else if val == "=" {
 			this.Type = typeEquals
 		} else if val == "," {
@@ -334,6 +308,9 @@ func (this *node) Parse() error {
 			return this.parseAlias(val)
 		}
 		// leave it typeId since that is legal as well
+		return nil
+	} else if this.Type == typeLabel {
+
 	}
 	return nil
 }
@@ -655,62 +632,6 @@ func (this *_parser) Process() error {
 	}
 	return nil
 }
-func (this *_parser) parseString(first *node, rest []*node) error {
-	switch len(rest) {
-	case 2:
-		if !rest[1].Type.comment() {
-			return fmt.Errorf("Too many arguments provided to .string")
-		}
-		fallthrough
-	case 1:
-		if str := rest[0]; str.Type != typeString {
-			return fmt.Errorf("input to the string directive is not a string!")
-		} else {
-			if this.currSegment == codeSegment {
-				return fmt.Errorf("Can't insert a string into the code segment!")
-			} else {
-				s := str.Value.(string)
-				var fn func(*_parser, Word, Word) error
-				switch this.currSegment {
-				case stackSegment:
-					fn = func(t *_parser, addr, value Word) error {
-						return t.core.SetStackMemory(addr, value)
-					}
-				case callSegment:
-					fn = func(t *_parser, addr, value Word) error {
-						return t.core.SetCallMemory(addr, value)
-					}
-				case dataSegment:
-					fn = func(t *_parser, addr, value Word) error {
-						return t.core.SetDataMemory(addr, value)
-					}
-				case microcodeSegment:
-					fn = func(t *_parser, addr, value Word) error {
-						return t.core.SetMicrocodeMemory(addr, value)
-					}
-				default:
-					return fmt.Errorf("Unknown segment!")
-				}
-				start := this.addrs[this.currSegment]
-				for ind, c := range s {
-					if err := fn(this, start+Word(ind), Word(c)); err != nil {
-						return err
-					}
-				}
-				if err := fn(this, start+Word(len(s)), Word(0)); err != nil {
-					return err
-				}
-				this.addrs[this.currSegment] += Word(len(s) + 1)
-				return nil
-			}
-		}
-	case 0:
-		return fmt.Errorf("No arguments passed to .string directive")
-	default:
-		return fmt.Errorf("Too many arguments passed to .string directive")
-	}
-	return nil
-}
 func (this *_parser) parseStatement(stmt *statement) error {
 	// get the first element and perform a correct dispatch
 	first, err := stmt.First()
@@ -770,8 +691,6 @@ func (this *_parser) parseStatement(stmt *statement) error {
 		return fmt.Errorf("Can't start a line with a equals sign")
 	case typeId:
 		return fmt.Errorf("Unknown node %s", first.Value)
-	case typeDirectiveString:
-		return this.parseString(first, rest)
 	default:
 		return fmt.Errorf("Unhandled nodeType %d: %s", first.Type, first.Value)
 	}
