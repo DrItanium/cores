@@ -301,6 +301,9 @@ func (this *node) Parse() error {
 		} else if strings.HasPrefix(val, "#") {
 			return this.parseImmediate(val)
 		} else if strings.HasPrefix(val, "r") {
+			if err := this.parseRegister(val); err != nil {
+				this.Type = typeId // restore typeId since the parsing failed
+			}
 			return this.parseRegister(val)
 		} else if strings.HasPrefix(val, ".") {
 			return this.parseDirective(val)
@@ -308,9 +311,6 @@ func (this *node) Parse() error {
 			return this.parseAlias(val)
 		}
 		// leave it typeId since that is legal as well
-		return nil
-	} else if this.Type == typeLabel {
-
 	}
 	return nil
 }
