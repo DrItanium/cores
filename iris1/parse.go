@@ -304,7 +304,6 @@ func (this *node) Parse() error {
 			if err := this.parseRegister(val); err != nil {
 				this.Type = typeId // restore typeId since the parsing failed
 			}
-			return this.parseRegister(val)
 		} else if strings.HasPrefix(val, ".") {
 			return this.parseDirective(val)
 		} else if strings.HasPrefix(val, "?") {
