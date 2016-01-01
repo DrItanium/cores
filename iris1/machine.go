@@ -598,7 +598,7 @@ func (this segment) acceptsWords() bool {
 }
 
 func (this *Core) StackMemory(address Word) Word {
-	return this.ucode[address]
+	return this.stack[address]
 }
 
 func (this *Core) SetStackMemory(address, value Word) error {
@@ -606,7 +606,7 @@ func (this *Core) SetStackMemory(address, value Word) error {
 	return nil
 }
 func (this *Core) CallMemory(address Word) Word {
-	return this.ucode[address]
+	return this.call[address]
 }
 
 func (this *Core) SetCallMemory(address, value Word) error {
