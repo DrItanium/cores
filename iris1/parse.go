@@ -629,6 +629,24 @@ func (this *_parser) Process() error {
 			this.core.code[d.addr] = *z
 		}
 	}
+	for _, ind := range this.indirectAddresses {
+		if v, err := this.resolveLabel(ind.label); err != nil {
+			return err
+		} else {
+			switch ind.seg {
+			case dataSegment:
+				this.core.data[ind.address] = v
+			case microcodeSegment:
+				this.core.ucode[ind.address] = v
+			case callSegment:
+				this.core.call[ind.address] = v
+			case stackSegment:
+				this.core.stack[ind.address] = v
+			default:
+				return fmt.Errorf("Can't store words to the current segment!")
+			}
+		}
+	}
 	return nil
 }
 func (this *_parser) parseStatement(stmt *statement) error {
