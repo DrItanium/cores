@@ -1034,6 +1034,8 @@ func (this *_parser) parseArithmetic(t *node, nodes []*node) error {
 				inst.Op = ArithmeticOpIncrement
 			case keywordDecrement:
 				inst.Op = ArithmeticOpDecrement
+			case keywordNot:
+				inst.Op = ArithmeticOpBinaryNot
 			default:
 				return fmt.Errorf("Illegal arithmetic operation %s", t.Value)
 			}
@@ -1108,8 +1110,6 @@ func (this *_parser) parseArithmetic(t *node, nodes []*node) error {
 					inst.Op = ArithmeticOpBinaryAnd
 				case keywordOr:
 					inst.Op = ArithmeticOpBinaryOr
-				case keywordNot:
-					inst.Op = ArithmeticOpBinaryNot
 				case keywordXor:
 					inst.Op = ArithmeticOpBinaryXor
 				default:
