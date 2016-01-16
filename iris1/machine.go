@@ -604,6 +604,6 @@ func (this *Core) IoMemory(address Word) Word {
 	return this.Io[address]
 }
 func (this *Core) SetIoMemory(address, value Word) error {
-	this.Io[address]
+	this.Io[address] = value
 	return nil
 }

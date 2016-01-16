@@ -91,6 +91,8 @@ func load(core *Core, inst *DecodedInstruction) error {
 		val = core.StackMemory(addr)
 	case callSegment:
 		val = core.CallMemory(addr)
+	case ioSegment:
+		val = core.IoMemory(addr)
 	case codeSegment:
 		return fmt.Errorf("Can't load from the code segment!")
 	default:
@@ -112,6 +114,8 @@ func store(core *Core, inst *DecodedInstruction) error {
 		return core.SetCallMemory(core.Register(dest), src)
 	case codeSegment:
 		return fmt.Errorf("Can't write to code memory!")
+	case ioSegment:
+		return core.SetIoMemory(core.Register(dest), src)
 	default:
 		return fmt.Errorf("Attempted to write to illegal segment %d", seg)
 	}
