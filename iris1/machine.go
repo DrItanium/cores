@@ -212,7 +212,7 @@ type Core struct {
 	ucode [MemorySize]Word
 	stack [MemorySize]Word
 	call  [MemorySize]Word
-	Io    [MemorySize]Word
+	io    []IoDevice
 	// internal registers that should be easy to find
 	instructionPointer Word
 	stackPointer       Word
@@ -520,8 +520,6 @@ func (this *Core) InstallProgram(input <-chan byte) error {
 		return err
 	} else if err := installWords(this.call, input); err != nil {
 		return err
-	} else if err := installWords(this.Io, input); err != nil {
-		return err
 	} else {
 		return nil
 	}
@@ -548,7 +546,6 @@ func (this *Core) Dump(output chan<- byte) error {
 	dumpWords(this.ucode, output)
 	dumpWords(this.stack, output)
 	dumpWords(this.call, output)
-	dumpWords(this.Io, output)
 	return nil
 }
 
@@ -599,11 +596,37 @@ func (this *Core) SetCallMemory(address, value Word) error {
 	this.call[address] = value
 	return nil
 }
+func (this *Core) RegisterIoDevice(dev IoDevice) error {
+	for _, d := range this.io {
+		if d.RespondsTo(dev.Begin()) || d.RespondsTo(dev.End()) {
+			return fmt.Errorf("Attempted to map an io device into memory that is already mapped. The addresses are from %x to %x", dev.Begin(), dev.End())
+		}
+	}
+	this.io = append(this.io, dev)
+	return nil
+}
 
-func (this *Core) IoMemory(address Word) Word {
-	return this.Io[address]
+type IoDevice interface {
+	Begin() Word
+	End() Word
+	Load(address Word) (Word, error)
+	Store(address, value Word) error
+	RespondsTo(address Word) bool
+}
+
+func (this *Core) IoMemory(address Word) (Word, error) {
+	for _, d := range this.io {
+		if d.RespondsTo(address) {
+			return d.Load(address)
+		}
+	}
+	return 0, fmt.Errorf("Attempted to load from undeclared io address %x", address)
 }
 func (this *Core) SetIoMemory(address, value Word) error {
-	this.Io[address] = value
-	return nil
+	for _, d := range this.io {
+		if d.RespondsTo(address) {
+			return d.Store(address, value)
+		}
+	}
+	return fmt.Errorf("Attempted to store to undeclared io address %x", address)
 }

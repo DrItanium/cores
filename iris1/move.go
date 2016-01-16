@@ -92,7 +92,11 @@ func load(core *Core, inst *DecodedInstruction) error {
 	case callSegment:
 		val = core.CallMemory(addr)
 	case ioSegment:
-		val = core.IoMemory(addr)
+		if q, err := core.IoMemory(addr); err != nil {
+			return err
+		} else {
+			val = q
+		}
 	case codeSegment:
 		return fmt.Errorf("Can't load from the code segment!")
 	default:

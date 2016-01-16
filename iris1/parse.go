@@ -74,7 +74,6 @@ const (
 	typeDirectiveMicrocode
 	typeDirectiveCall
 	typeDirectiveStack
-	typeDirectiveIo
 	// keywords
 	// memory words
 	keywordSet
@@ -214,7 +213,6 @@ var directives = map[string]nodeType{
 	"microcode": typeDirectiveMicrocode,
 	"stack":     typeDirectiveStack,
 	"procedure": typeDirectiveCall,
-	"io":        typeDirectiveIo,
 }
 
 func (this *node) parseDirective(val string) error {
@@ -644,8 +642,6 @@ func (this *_parser) Process() error {
 				this.core.call[ind.address] = v
 			case stackSegment:
 				this.core.stack[ind.address] = v
-			case ioSegment:
-				this.core.Io[ind.address] = v
 			default:
 				return fmt.Errorf("Can't store words to the current segment!")
 			}
@@ -702,8 +698,6 @@ func (this *_parser) parseStatement(stmt *statement) error {
 		return this.setSegment(rest, callSegment, "call")
 	case typeDirectiveStack:
 		return this.setSegment(rest, stackSegment, "stack")
-	case typeDirectiveIo:
-		return this.setSegment(rest, ioSegment, "io")
 	case typeDirectiveOrg:
 		return this.setPosition(rest)
 	case typeDirectiveWord:
