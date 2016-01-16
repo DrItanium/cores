@@ -142,12 +142,35 @@ func (this *_parser) Parse(lines <-chan parser.Entry) error {
 		stmt := carveLine(line.Line)
 		stmt.index = line.Index
 		this.statements = append(this.statements, stmt)
+		for _, str := range stmt.contents {
+			if err := str.Parse(); err != nil {
+				return fmt.Errorf("Error: line: %d : %s\n", line.Index, err)
+			}
+		}
 	}
 	return nil
 }
 
 type nodeType int
 
+func (this nodeType) String() string {
+	switch this {
+	case typeId:
+		return "id"
+	case typeImmediate:
+		return "immediate"
+	case typeLabel:
+		return "label"
+	case typeComment:
+		return "comment"
+	case keywordXand:
+		return "xand"
+	case keywordDotDotDot:
+		return "..."
+	default:
+		return fmt.Sprintf("%d", this)
+	}
+}
 func (this nodeType) immediate() bool {
 	return this == typeImmediate
 }
@@ -219,6 +242,7 @@ func (this *node) Parse() error {
 	if this.Type == typeId {
 		val := this.Value.(string)
 		if this.parseGeneric(val) == nil {
+
 		} else if strings.HasSuffix(val, ":") {
 			return this.parseLabel(val)
 		} else if strings.HasPrefix(val, ";") {
