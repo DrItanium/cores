@@ -550,9 +550,19 @@ func (this *Core) Dump(output chan<- byte) error {
 }
 
 func (this *Core) Startup() error {
+	for _, dev := range this.io {
+		if err := dev.Startup(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 func (this *Core) Shutdown() error {
+	for _, dev := range this.io {
+		if err := dev.Shutdown(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -612,6 +622,8 @@ type IoDevice interface {
 	Load(address Word) (Word, error)
 	Store(address, value Word) error
 	RespondsTo(address Word) bool
+	Startup() error
+	Shutdown() error
 }
 
 func (this *Core) IoMemory(address Word) (Word, error) {
