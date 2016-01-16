@@ -2,6 +2,7 @@
 package xand
 
 import (
+	"fmt"
 	"github.com/DrItanium/cores/registration/machine"
 )
 
@@ -32,7 +33,7 @@ type Core struct {
 }
 
 func (this *Core) fetch() bool {
-	if this.pc < 0 || (pc+2) >= len(this.memory) {
+	if (this.pc < 0) || (int(this.pc+2) >= len(this.memory)) {
 		return false
 	} else {
 		this.ir[0] = this.memory[this.pc]
@@ -77,7 +78,7 @@ func (this *Core) InstallProgram(input <-chan byte) error {
 		if value, more := <-input; !more {
 			return fmt.Errorf("Not a complete xand memory image")
 		} else {
-			this.memory[i] = value
+			this.memory[i] = int8(value)
 		}
 	}
 	return nil
@@ -85,7 +86,11 @@ func (this *Core) InstallProgram(input <-chan byte) error {
 
 func (this *Core) Dump(output chan<- byte) error {
 	for _, value := range this.memory {
-		output <- value
+		output <- byte(value)
 	}
 	return nil
+}
+
+func New() (*Core, error) {
+	return &Core{}, nil
 }
