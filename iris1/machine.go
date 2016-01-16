@@ -212,6 +212,7 @@ type Core struct {
 	ucode [MemorySize]Word
 	stack [MemorySize]Word
 	call  [MemorySize]Word
+	Io    [MemorySize]Word
 	// internal registers that should be easy to find
 	instructionPointer Word
 	stackPointer       Word
@@ -494,6 +495,16 @@ func readInstruction(input <-chan byte) (Instruction, error) {
 
 }
 func (this *Core) InstallProgram(input <-chan byte) error {
+	installWords := func(data [MemorySize]Word, input <-chan byte) error {
+		for i := 0; i < MemorySize; i++ {
+			if val, err := readWord(input); err != nil {
+				return err
+			} else {
+				data[i] = val
+			}
+		}
+		return nil
+	}
 	for i := 0; i < MemorySize; i++ {
 		if inst, err := readInstruction(input); err != nil {
 			return err
@@ -501,69 +512,43 @@ func (this *Core) InstallProgram(input <-chan byte) error {
 			this.code[i] = inst
 		}
 	}
-	for i := 0; i < MemorySize; i++ {
-		if inst, err := readWord(input); err != nil {
-			return err
-		} else {
-			this.data[i] = inst
-		}
+	if err := installWords(this.data, input); err != nil {
+		return err
+	} else if err := installWords(this.ucode, input); err != nil {
+		return err
+	} else if err := installWords(this.stack, input); err != nil {
+		return err
+	} else if err := installWords(this.call, input); err != nil {
+		return err
+	} else if err := installWords(this.Io, input); err != nil {
+		return err
+	} else {
+		return nil
 	}
-	for i := 0; i < MemorySize; i++ {
-		if inst, err := readWord(input); err != nil {
-			return err
-		} else {
-			this.ucode[i] = inst
-		}
-	}
-	for i := 0; i < MemorySize; i++ {
-		if inst, err := readWord(input); err != nil {
-			return err
-		} else {
-			this.stack[i] = inst
-		}
-	}
-	for i := 0; i < MemorySize; i++ {
-		if inst, err := readWord(input); err != nil {
-			return err
-		} else {
-			this.call[i] = inst
-		}
-	}
-	return nil
 }
 
 func (this *Core) Dump(output chan<- byte) error {
-	inst, word := make([]byte, 4), make([]byte, 2)
+	inst := make([]byte, 4)
+	dumpWords := func(data [MemorySize]Word, output chan<- byte) {
+		word := make([]byte, 2)
+		for _, dat := range data {
+			binary.LittleEndian.PutUint16(word, uint16(dat))
+			for _, v := range word {
+				output <- v
+			}
+		}
+	}
 	for _, dat := range this.code {
 		binary.LittleEndian.PutUint32(inst, uint32(dat))
 		for _, v := range inst {
 			output <- v
 		}
 	}
-	for _, dat := range this.data {
-		binary.LittleEndian.PutUint16(word, uint16(dat))
-		for _, v := range word {
-			output <- v
-		}
-	}
-	for _, dat := range this.ucode {
-		binary.LittleEndian.PutUint16(word, uint16(dat))
-		for _, v := range word {
-			output <- v
-		}
-	}
-	for _, val := range this.stack {
-		binary.LittleEndian.PutUint16(word, uint16(val))
-		for _, b := range word {
-			output <- b
-		}
-	}
-	for _, val := range this.call {
-		binary.LittleEndian.PutUint16(word, uint16(val))
-		for _, b := range word {
-			output <- b
-		}
-	}
+	dumpWords(this.data, output)
+	dumpWords(this.ucode, output)
+	dumpWords(this.stack, output)
+	dumpWords(this.call, output)
+	dumpWords(this.Io, output)
 	return nil
 }
 
@@ -582,6 +567,7 @@ const (
 	microcodeSegment
 	stackSegment
 	callSegment
+	ioSegment
 	numSegments
 )
 
@@ -594,7 +580,7 @@ func (this segment) acceptsDwords() bool {
 	return this == codeSegment
 }
 func (this segment) acceptsWords() bool {
-	return this == dataSegment || this == microcodeSegment || this == stackSegment || this == callSegment
+	return this != codeSegment
 }
 
 func (this *Core) StackMemory(address Word) Word {
@@ -611,5 +597,13 @@ func (this *Core) CallMemory(address Word) Word {
 
 func (this *Core) SetCallMemory(address, value Word) error {
 	this.call[address] = value
+	return nil
+}
+
+func (this *Core) IoMemory(address Word) Word {
+	return this.Io[address]
+}
+func (this *Core) SetIoMemory(address, value Word) error {
+	this.Io[address]
 	return nil
 }
