@@ -121,10 +121,16 @@ func init() {
 	parser.Register(RegistrationName(), ParsingRegistrar(generateParser))
 }
 
+type deferredAddress struct {
+	addr  int8
+	title string
+}
+
 type _parser struct {
 	core       *Core
 	labels     map[string]int8
 	statements []statement
+	deferred   []deferredAddress
 }
 
 func (this *_parser) Dump(pipe chan<- byte) error {
@@ -304,18 +310,24 @@ func (this *_parser) Process() error {
 			return fmt.Errorf("Error: line %d: msg: %s", stmt.index, err)
 		}
 	}
-	for _, d := range this.deferredInstructions {
-		str := d.trouble.Value.(string)
-		if v, err := this.resolveLabel(str); err != nil {
-			return err
+	for _, d := range this.deferred {
+		if entry, ok := this.labels[d.title]; !ok {
+			return fmt.Errorf("Label %s not defined!", d.title)
 		} else {
-			q := d.inst
-			q.SetImmediate(v)
-			z := q.Encode()
-			this.core.code[d.addr] = *z
+			this.core.memory[d.addr] = entry
 		}
 	}
 	return nil
+}
+
+func (this *_parser) newLabel(n *node) error {
+	name := n.Value.(string)
+	if _, ok := this.labels[name]; ok {
+		return fmt.Errorf("Label %s is already defined!", name)
+	} else {
+		this.labels[name] = this.core.pc
+		return nil
+	}
 }
 
 func (this *_parser) parseStatement(stmt *statement) error {
@@ -335,6 +347,9 @@ func (this *_parser) parseStatement(stmt *statement) error {
 		if err := this.newLabel(first); err != nil {
 			return err
 		} else if len(rest) > 0 {
+			if this.core.pc < 0 {
+				return fmt.Errorf("Too many instructions defined!")
+			}
 			// if there are more entries on the line then check them out
 			var s statement
 			s.index = stmt.index
@@ -343,6 +358,9 @@ func (this *_parser) parseStatement(stmt *statement) error {
 		}
 	case keywordXand:
 		if len(rest) == 3 {
+			if this.core.pc < 0 {
+				return fmt.Errorf("Too many instructions defined!")
+			}
 			var s statement
 			s.index = stmt.index
 			s.contents = rest
@@ -362,13 +380,31 @@ func (this *_parser) parseStatement(stmt *statement) error {
 		this.core.memory[this.core.pc] = first.Value.(int8)
 		this.core.pc++
 		if len(rest) > 0 {
+			if this.core.pc < 0 {
+				return fmt.Errorf("Too many instructions defined!")
+			}
 			var s statement
 			s.index = stmt.index
 			s.contents = rest
 			return this.parseStatement(&s)
 		}
 	case typeId:
-		return fmt.Errorf("Unknown node %s", first.Value)
+		// defer statement for the time being
+		if addr, ok := this.labels[first.Value.(string)]; !ok {
+			this.deferred = append(this.deferred, deferredAddress{addr: this.core.pc, title: first.Value.(string)})
+		} else {
+			this.core.memory[this.core.pc] = addr
+		}
+		this.core.pc++
+		if len(rest) > 0 {
+			if this.core.pc < 0 {
+				return fmt.Errorf("Too many instructions defined!")
+			}
+			var s statement
+			s.index = stmt.index
+			s.contents = rest
+			return this.parseStatement(&s)
+		}
 	default:
 		return fmt.Errorf("Unhandled nodeType %d: %s", first.Type, first.Value)
 	}
