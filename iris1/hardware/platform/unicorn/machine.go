@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/DrItanium/cores/iris1"
 	"github.com/DrItanium/cores/registration/machine"
+	"github.com/DrItanium/cores/registration/parser"
 	"github.com/DrItanium/unicornhat"
 )
 
@@ -16,20 +17,12 @@ func RegistrationName() string {
 	return "iris1-unicorn"
 }
 
-func Register() {}
-
-type MachineRegistrar func(...interface{}) (machine.Machine, error)
-
-func (this MachineRegistrar) New(args ...interface{}) (machine.Machine, error) {
-	return this(args)
-}
-
 func generateCore(a ...interface{}) (machine.Machine, error) {
 	return New()
 }
 
 func init() {
-	machine.Register(RegistrationName(), MachineRegistrar(generateCore))
+	machine.Register(RegistrationName(), machine.Registrar(generateCore))
 }
 
 func New() (*iris1.Core, error) {
@@ -201,4 +194,13 @@ func (this *LedArray) Shutdown() error {
 		this.initialized = false
 		return nil
 	}
+}
+
+func generateParser(args ...interface{}) (parser.Parser, error) {
+	// this is a bit of a hack but just call the iris1 parser from the parser list :D
+	return parser.New(iris1.RegistrationName(), args)
+}
+
+func init() {
+	parser.Register(RegistrationName(), parser.Registrar(generateParser))
 }
