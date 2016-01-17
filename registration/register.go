@@ -2,13 +2,7 @@
 package registration
 
 import (
-	"github.com/DrItanium/cores/iris1"
-	"github.com/DrItanium/cores/xand"
+	_ "github.com/DrItanium/cores/iris1"
+	_ "github.com/DrItanium/cores/iris1/hardware/platform/unicorn"
+	_ "github.com/DrItanium/cores/xand"
 )
-
-// does nothing
-func Register() {}
-func init() {
-	iris1.Register()
-	xand.Register()
-}
