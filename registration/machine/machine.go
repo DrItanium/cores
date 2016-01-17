@@ -63,3 +63,9 @@ type Machine interface {
 
 // Dummy function used to force inclusion of this library
 func Activate() {}
+
+type Registrar func(...interface{}) (Machine, error)
+
+func (this Registrar) New(args ...interface{}) (Machine, error) {
+	return this(args)
+}

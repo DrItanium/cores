@@ -64,3 +64,9 @@ func IsRegistered(name string) bool {
 }
 
 func Activate() {}
+
+type Registrar func(...interface{}) (Parser, error)
+
+func (this Registrar) New(args ...interface{}) (Parser, error) {
+	return this(args)
+}
