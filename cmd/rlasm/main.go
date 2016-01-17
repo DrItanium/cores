@@ -5,7 +5,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"github.com/DrItanium/cores/registration"
+	_ "github.com/DrItanium/cores/registration"
 	"github.com/DrItanium/cores/registration/parser"
 	"os"
 	"strings"
@@ -16,10 +16,6 @@ var input = flag.String("input", "", "input file to be processed (leave blank fo
 var output = flag.String("output", "", "output file (leave blank for stdout)")
 var listTargets = flag.Bool("list-targets", false, "display registered targets and exit")
 var debug = flag.Bool("debug", false, "enable debug")
-
-func init() {
-	registration.Register()
-}
 
 func listRegisteredTargets() {
 	fmt.Fprintln(os.Stderr, "Supported targets: ")

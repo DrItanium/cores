@@ -4,7 +4,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/DrItanium/cores/registration"
+	_ "github.com/DrItanium/cores/registration"
 	"github.com/DrItanium/cores/registration/machine"
 	"io/ioutil"
 	"os"
@@ -15,10 +15,6 @@ var listTargets = flag.Bool("list-targets", false, "List supported machines and 
 var input = flag.String("input", "", "input file to be processed (leave blank for stdin)")
 var debug = flag.Bool("debug", false, "enable/disable debugging")
 
-func init() {
-	// this does nothing but prevent compilation errors
-	registration.Register()
-}
 func listRegisteredTargets() {
 	fmt.Fprintln(os.Stderr, "Supported targets: ")
 	for _, val := range machine.GetRegistered() {
