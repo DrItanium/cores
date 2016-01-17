@@ -79,10 +79,12 @@ func body() (bool, bool, error, int) {
 					}
 				}
 			}
+			mach.Startup()
 			if err := mach.Run(); err != nil {
 				fmt.Printf("Something went wrong during machine execution: %s!", err)
 				return false, false, fmt.Errorf("Something went wrong during machine execution: %s!", err), 8
 			}
+			mach.Shutdown()
 		}
 		return false, false, nil, 0
 	}
