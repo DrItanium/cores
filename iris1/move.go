@@ -106,20 +106,20 @@ func load(core *Core, inst *DecodedInstruction) error {
 }
 
 func store(core *Core, inst *DecodedInstruction) error {
-	dest, src, seg := inst.Data[0], core.Register(inst.Data[1]), segment(inst.Data[2])
+	dest, src, seg := core.Register(inst.Data[0]), core.Register(inst.Data[1]), segment(inst.Data[2])
 	switch segment(seg) {
 	case dataSegment:
-		return core.SetDataMemory(core.Register(dest), src)
+		return core.SetDataMemory(dest, src)
 	case microcodeSegment:
-		return core.SetMicrocodeMemory(core.Register(dest), src)
+		return core.SetMicrocodeMemory(dest, src)
 	case stackSegment:
-		return core.SetStackMemory(core.Register(dest), src)
+		return core.SetStackMemory(dest, src)
 	case callSegment:
-		return core.SetCallMemory(core.Register(dest), src)
+		return core.SetCallMemory(dest, src)
 	case codeSegment:
 		return fmt.Errorf("Can't write to code memory!")
 	case ioSegment:
-		return core.SetIoMemory(core.Register(dest), src)
+		return core.SetIoMemory(dest, src)
 	default:
 		return fmt.Errorf("Attempted to write to illegal segment %d", seg)
 	}
