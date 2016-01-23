@@ -11,6 +11,10 @@ import (
 	"unicode/utf8"
 )
 
+type Word int8
+
+const MemorySize = 128
+
 func RegistrationName() string {
 	return "xand"
 }
@@ -32,9 +36,9 @@ func init() {
 }
 
 type Core struct {
-	pc     int8
-	ir     [3]int8
-	memory [128]int8
+	pc     Word
+	ir     [3]Word
+	memory [MemorySize]Word
 }
 
 func (this *Core) fetch() bool {
@@ -79,11 +83,11 @@ func (this *Core) SetDebug(_ bool) {
 
 func (this *Core) InstallProgram(input <-chan byte) error {
 	// read 128 bytes
-	for i := 0; i < 128; i++ {
+	for i := 0; i < MemorySize; i++ {
 		if value, more := <-input; !more {
 			return fmt.Errorf("Not a complete xand memory image")
 		} else {
-			this.memory[i] = int8(value)
+			this.memory[i] = Word(value)
 		}
 	}
 	return nil
@@ -112,7 +116,7 @@ func generateParser(a ...interface{}) (parser.Parser, error) {
 		return nil, err
 	} else {
 		p.core = core
-		p.labels = make(map[string]int8)
+		p.labels = make(map[string]Word)
 		return &p, nil
 	}
 }
@@ -122,13 +126,13 @@ func init() {
 }
 
 type deferredAddress struct {
-	addr  int8
+	addr  Word
 	title string
 }
 
 type _parser struct {
 	core       *Core
-	labels     map[string]int8
+	labels     map[string]Word
 	statements []*statement
 	deferred   []deferredAddress
 }
@@ -192,9 +196,9 @@ type node struct {
 	Type  nodeType
 }
 
-func parseDecimalImmediate(str string) (int8, error) {
+func parseDecimalImmediate(str string) (Word, error) {
 	val, err := strconv.ParseInt(str, 10, 8)
-	return int8(val), err
+	return Word(val), err
 }
 
 func (this *node) parseLabel(val string) error {
@@ -401,7 +405,7 @@ func (this *_parser) parseStatement(stmt *statement) error {
 		}
 	case typeImmediate:
 		// just install the value to the current address
-		this.core.memory[this.core.pc] = first.Value.(int8)
+		this.core.memory[this.core.pc] = first.Value.(Word)
 		this.core.pc++
 		if len(rest) > 0 {
 			if this.core.pc < 0 {
