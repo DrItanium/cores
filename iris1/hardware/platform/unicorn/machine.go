@@ -1,4 +1,8 @@
 // iris1 core with unicornhat interface
+
+// +build linux
+// +build arm
+
 package unicorn
 
 import (
