@@ -1,5 +1,5 @@
 // extension of xand to 16-bits
-package xand
+package xand16
 
 import (
 	"encoding/binary"
