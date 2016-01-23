@@ -354,12 +354,12 @@ func (this *statement) Rest() []*node {
 	return this.contents[1:]
 }
 
-func carveLine(line string) statement {
+func carveLine(line string) *statement {
 	// trim the damn line first
 	data := strings.TrimSpace(line)
 	var s statement
 	if len(data) == 0 {
-		return s
+		return &s
 	}
 	oldStart := 0
 	start := 0
@@ -403,7 +403,7 @@ func carveLine(line string) statement {
 	if oldStart < start {
 		s.AddUnknown(data[oldStart:])
 	}
-	return s
+	return &s
 }
 
 type labelEntry struct {
@@ -426,7 +426,7 @@ type deferredInstruction struct {
 
 type _parser struct {
 	core                 *Core
-	statements           []statement
+	statements           []*statement
 	labels               labelMap
 	addrs                [numSegments]Word
 	currSegment          segment
@@ -613,7 +613,7 @@ func (this *_parser) Parse(lines <-chan parser.Entry) error {
 func (this *_parser) Process() error {
 	// build up labels and alias listings
 	for _, stmt := range this.statements {
-		if err := this.parseStatement(&stmt); err != nil {
+		if err := this.parseStatement(stmt); err != nil {
 			return fmt.Errorf("Error: line %d: msg: %s", stmt.index, err)
 		}
 	}
