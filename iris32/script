@@ -2,7 +2,7 @@
 
 for i in $(ls -1)
 do
-	sed 's/package iris32/package iris32/' $i >> $i.replace
+	sed 's/package iris64/package iris64/' $i >> $i.replace
 	mv $i.replace $i
 done
 

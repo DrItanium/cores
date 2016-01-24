@@ -1,4 +1,4 @@
-package iris32
+package iris64
 
 import "fmt"
 

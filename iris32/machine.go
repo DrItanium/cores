@@ -1,5 +1,5 @@
-// machine description of iris1
-package iris32
+// machine description of iris64, a vliw chip
+package iris64
 
 import (
 	"encoding/binary"
@@ -88,11 +88,10 @@ var errorLookup = []string{
 	"Provided op id %d is larger than the space allotted to specifying the op",
 }
 
-type Word uint32
-type Dword uint64
+type Word uint64
 type FloatWord float64
 type Predicate bool
-type Instruction Dword
+type Instruction Word
 type ExecutionDescription byte
 type Packet struct {
 	Mode                 ExecutionDescription
@@ -150,6 +149,7 @@ func (this *Instruction) setWordField(upper bool, value Word) {
 		*this = (*this &^ 0x00000000FFFFFFFF) | Instruction(value)
 	}
 }
+
 func (this Instruction) group() byte {
 	return byte(((this & 0x000000FF) & 0x7))
 }
@@ -261,6 +261,7 @@ type SystemCall ExecutionUnit
 
 type Core struct {
 	gpr   [RegisterCount - UserRegisterBegin]Word
+	code  []Packet
 	code  [MemorySize]Instruction
 	data  [MemorySize]Word
 	ucode [MemorySize]Word
