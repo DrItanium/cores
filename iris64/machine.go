@@ -1,4 +1,4 @@
-// machine description of iris64, a vliw chip
+// machine description of iris64, a microcoded translation architecture
 package iris64
 
 import (
@@ -8,7 +8,7 @@ import (
 )
 
 func RegistrationName() string {
-	return "iris32"
+	return "iris64"
 }
 
 func generateCore(a ...interface{}) (machine.Machine, error) {
@@ -32,13 +32,27 @@ const (
 )
 const (
 	// reserved registers
-	FalseRegister = iota
-	TrueRegister
+	ZeroRegister = iota
+	OneRegister
 	InstructionPointer
 	StackPointer
 	PredicateRegister
 	CallPointer
 	UserRegisterBegin
+)
+const (
+	// reserved float registers
+	FloatZeroRegister = iota
+	FloatOneRegister
+	FloatNegativeOneRegister
+	FloatNanRegister
+	UserFloatRegisterBegin
+)
+const (
+	// predicate reserved registers
+	PredicateTrueRegister = iota
+	PredicateFalseRegister
+	UserPredicateRegisterBegin
 )
 
 const (
@@ -93,10 +107,6 @@ type FloatWord float64
 type Predicate bool
 type Instruction Word
 type ExecutionDescription byte
-type Packet struct {
-	Mode                 ExecutionDescription
-	First, Second, Third Instruction
-}
 
 var fieldMasks = []Instruction{
 	0x00000000000000FF,
@@ -258,16 +268,15 @@ func (this IrisError) Error() string {
 
 type ExecutionUnit func(*Core, *DecodedInstruction) error
 type SystemCall ExecutionUnit
-
 type Core struct {
-	gpr   [RegisterCount - UserRegisterBegin]Word
-	code  []Packet
-	code  [MemorySize]Instruction
-	data  [MemorySize]Word
-	ucode [MemorySize]Word
-	stack [MemorySize]Word
-	call  [MemorySize]Word
-	io    []IoDevice
+	gpr    [RegisterCount - UserRegisterBegin]Word
+	fpr    [FloatRegisterCount - UserFloatRegisterBegin]FloatWord
+	pred   [PredicateRegisterCount - UserPredicateRegisterBegin]Predicate
+	misc   [MiscRegisterCount]Word
+	code   chan Instruction
+	system []byte // needs to be defined on the command line, this is the externally visible memory
+	// internal caches are viewed as "io devices"
+	io []IoDevice
 	// internal registers that should be easy to find
 	instructionPointer Word
 	stackPointer       Word
