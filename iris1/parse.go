@@ -1,4 +1,4 @@
-package iris1
+package iris16
 
 import (
 	"fmt"
@@ -8,12 +8,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 )
-
-type ParsingRegistrar func(...interface{}) (parser.Parser, error)
-
-func (this ParsingRegistrar) New(args ...interface{}) (parser.Parser, error) {
-	return this(args)
-}
 
 func generateParser(a ...interface{}) (parser.Parser, error) {
 	var p _parser
@@ -28,7 +22,8 @@ func generateParser(a ...interface{}) (parser.Parser, error) {
 }
 
 func init() {
-	parser.Register(RegistrationName(), ParsingRegistrar(generateParser))
+	parser.Register("iris1", parser.Registrar(generateParser))
+	parser.Register(RegistrationName(), parser.Registrar(generateParser))
 }
 
 type nodeType int

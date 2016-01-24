@@ -1,5 +1,5 @@
 // machine description of iris1
-package iris1
+package iris16
 
 import (
 	"encoding/binary"
@@ -8,16 +8,7 @@ import (
 )
 
 func RegistrationName() string {
-	return "iris1"
-}
-
-// Dummy function to force inclusion
-func Register() {}
-
-type MachineRegistrar func(...interface{}) (machine.Machine, error)
-
-func (this MachineRegistrar) New(args ...interface{}) (machine.Machine, error) {
-	return this(args)
+	return "iris16"
 }
 
 func generateCore(a ...interface{}) (machine.Machine, error) {
@@ -25,7 +16,8 @@ func generateCore(a ...interface{}) (machine.Machine, error) {
 }
 
 func init() {
-	machine.Register(RegistrationName(), MachineRegistrar(generateCore))
+	machine.Register("iris1", machine.Registrar(generateCore))
+	machine.Register(RegistrationName(), machine.Registrar(generateCore))
 }
 
 const (

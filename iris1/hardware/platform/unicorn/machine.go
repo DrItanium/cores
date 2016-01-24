@@ -7,7 +7,7 @@ package unicorn
 
 import (
 	"fmt"
-	"github.com/DrItanium/cores/iris1"
+	"github.com/DrItanium/cores/iris16"
 	"github.com/DrItanium/cores/registration/machine"
 	"github.com/DrItanium/cores/registration/parser"
 	"github.com/DrItanium/unicornhat"
