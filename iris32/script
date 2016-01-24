@@ -1,8 +1,0 @@
-#!/bin/bash
-
-for i in $(ls -1)
-do
-	sed 's/package iris64/package iris64/' $i >> $i.replace
-	mv $i.replace $i
-done
-
