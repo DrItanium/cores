@@ -5,5 +5,5 @@
 package registration
 
 import (
-	_ "github.com/DrItanium/cores/iris1/hardware/platform/unicorn"
+	_ "github.com/DrItanium/cores/iris16/hardware/platform/unicorn"
 )
