@@ -21,7 +21,11 @@ func init() {
 }
 
 const (
+	// define a 1024 register complement in four different groups
 	RegisterCount            = 256
+	FloatRegisterCount       = 256
+	PredicateRegisterCount   = 256
+	MiscRegisterCount        = 256
 	MemorySize               = 65536
 	MajorOperationGroupCount = 8
 	SystemCallCount          = 256
@@ -84,10 +88,68 @@ var errorLookup = []string{
 	"Provided op id %d is larger than the space allotted to specifying the op",
 }
 
-type Word uint16
-type Dword uint32
+type Word uint32
+type Dword uint64
+type FloatWord float64
+type Predicate bool
 type Instruction Dword
+type ExecutionDescription byte
+type Packet struct {
+	Mode                 ExecutionDescription
+	First, Second, Third Instruction
+}
 
+var fieldMasks = []Instruction{
+	0x00000000000000FF,
+	0x000000000000FF00,
+	0x0000000000FF0000,
+	0x00000000FF000000,
+	0x000000FF00000000,
+	0x0000FF0000000000,
+	0x00FF000000000000,
+	0xFF00000000000000,
+}
+var shiftCounts = []uint{
+	0,
+	8,
+	16,
+	24,
+	32,
+	40,
+	48,
+	56,
+}
+
+func (this *Instruction) byteField(index byte) (byte, error) {
+	if index > 7 {
+		return 0, fmt.Errorf("Index %d is out of range!", index)
+	} else {
+		return byte((*this & fieldMasks[index]) >> shiftCounts[index]), nil
+	}
+}
+func (this *Instruction) setByteField(index, value byte) error {
+	if index > 7 {
+		return fmt.Errorf("Index %d is out of range!", index)
+	} else {
+		*this = (*this &^ fieldMasks[index]) | Instruction(Instruction(value)<<shiftCounts[index])
+		return nil
+	}
+}
+
+func (this *Instruction) wordField(upper bool) Word {
+	if upper {
+		return Word(*this >> 32)
+	} else {
+		return Word(*this)
+	}
+}
+func (this *Instruction) setWordField(upper bool, value Word) {
+	if upper {
+		*this = (*this &^ 0xFFFFFFFF00000000) | Instruction(Instruction(value)<<32)
+	} else {
+		*this = (*this &^ 0x00000000FFFFFFFF) | Instruction(value)
+	}
+}
 func (this Instruction) group() byte {
 	return byte(((this & 0x000000FF) & 0x7))
 }
