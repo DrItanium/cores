@@ -116,6 +116,11 @@ func (this *MemoryUnit) controlInvoke() {
 	close(this.err)
 }
 
+const (
+	MemoryLoad = iota
+	MemoryStore
+)
+
 func (this *MemoryUnit) body() {
 	for this.running {
 		select {
@@ -125,10 +130,10 @@ func (this *MemoryUnit) body() {
 				this.err <- fmt.Errorf("Out of range!")
 			} else {
 				switch op {
-				case 0: // load
+				case MemoryLoad: // load
 					this.out <- this.memory[addr]
 					this.err <- nil
-				case 1: // store
+				case MemoryStore: // store
 					this.memory[addr] = <-this.value
 					this.err <- nil
 				default:
@@ -185,23 +190,29 @@ func (this *Alu) controlInvoke() {
 	close(this.control)
 }
 
+const (
+	AluSubtract = iota
+	AluLessThanZero
+	AluLessThanOrEqualToZero
+)
+
 func (this *Alu) body() {
 	for this.running {
 		select {
 		case op := <-this.op:
 			a := <-this.a
 			switch op {
-			case 0:
+			case AluSubtract:
 				result := (a - <-this.b)
 				this.out <- result
 				this.out <- result
-			case 1:
+			case AluLessThanZero:
 				if a < 0 {
 					this.out <- 1
 				} else {
 					this.out <- 0
 				}
-			case 2:
+			case AluLessThanOrEqualToZero:
 				if a <= 0 {
 					this.out <- 1
 				} else {
@@ -252,9 +263,9 @@ func (this *Core) Run() error {
 		this.memory.Addr <- this.pc
 		this.memory.Addr <- this.pc + 1
 		this.memory.Addr <- this.pc + 2
-		this.memory.Op <- 0
-		this.memory.Op <- 0
-		this.memory.Op <- 0
+		this.memory.Op <- MemoryLoad
+		this.memory.Op <- MemoryLoad
+		this.memory.Op <- MemoryLoad
 		if <-this.memory.Error != nil || <-this.memory.Error != nil || <-this.memory.Error != nil {
 			return nil
 		}
@@ -262,9 +273,9 @@ func (this *Core) Run() error {
 		this.alu.First <- a
 		this.alu.First <- b
 		this.alu.First <- c
-		this.alu.Op <- 1
-		this.alu.Op <- 1
-		this.alu.Op <- 1
+		this.alu.Op <- AluLessThanZero
+		this.alu.Op <- AluLessThanZero
+		this.alu.Op <- AluLessThanZero
 		// Check and see if a, b, or c are less than zero. Halt if it
 		// is the case
 		ra, rb, rc := <-this.alu.Result, <-this.alu.Result, <-this.alu.Result
@@ -278,15 +289,15 @@ func (this *Core) Run() error {
 		this.memory.Addr <- a                      // denote that we want to load memory[a]
 		this.memory.Addr <- b                      // denote that we want to load memory[b]
 		this.memory.Addr <- a                      // put a into the address queue ahead of time here for the memory[a] store later on
-		this.memory.Op <- 0                        // command the memory unit to load the contents of memory[a]
-		this.memory.Op <- 0                        // command the memory unit to load the contents of memory[b]
+		this.memory.Op <- MemoryLoad               // command the memory unit to load the contents of memory[a]
+		this.memory.Op <- MemoryLoad               // command the memory unit to load the contents of memory[b]
 		this.alu.First <- <-this.memory.Result     // load memory[a] into the alu first "register"
 		this.alu.Second <- <-this.memory.Result    // load memory[b] into the alu second "register"
-		this.alu.Op <- 0                           // tell the alu to perform the subtraction and load two copies of the result into the Result channel
+		this.alu.Op <- AluSubtract                 // tell the alu to perform the subtraction and load two copies of the result into the Result channel
 		this.branch.Condition <- <-this.alu.Result // Use the first copy of the subtraction result as the condition to the branch unit
 		this.pc = <-this.branch.Result             // get the selected value out of the branch unit
 		this.memory.Value <- <-this.alu.Result     // store the second copy of the subtraction result into memory[a]
-		this.memory.Op <- 1                        // tell the memory unit to perform a storeA
+		this.memory.Op <- MemoryStore              // tell the memory unit to perform a storeA
 		// clear out the errors from the memory unit before ending the
 		// cycle
 		if err := <-this.memory.Error; err != nil {
