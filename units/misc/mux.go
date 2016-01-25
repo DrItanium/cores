@@ -1,28 +1,28 @@
 // Multiplxer circuit
-package misc
+package mux
 
 import (
 	"fmt"
 )
 
 type Multiplexer struct {
-	running      bool
-	destinations []chan<- interface{}
-	selector     <-chan int64
-	Control      <-chan int64
-	source       <-chan interface{}
-	err          chan error
-	Error        <-chan error
+	running     bool
+	sources     []<-chan interface{}
+	selector    <-chan int64
+	Control     <-chan int64
+	destination chan<- interface{}
+	err         chan error
+	Error       <-chan error
 }
 
-func NewMultiplexer(control, selector <-chan int64, source <-chan interface{}, dest0 chan<- interface{}, dest ...chan<- interface{}) *Multiplexer {
+func NewMultiplexer(control, selector <-chan int64, dest chan<- interface{}, src0 <-chan interface{}, srcs ...<-chan interface{}) *Multiplexer {
 	var mux Multiplexer
 	mux.err = make(chan error)
 	mux.Error = mux.err
-	mux.destinations = []chan<- interface{}{dest0}
-	mux.destinations = append(mux.destinations, dest...)
+	mux.sources = []chan<- interface{}{src0}
+	mux.sources = append(mux.sources, srcs...)
 	mux.selector = selector
-	mux.source = source
+	mux.destination = dest
 	mux.Control = control
 	return &mux
 }
@@ -31,12 +31,12 @@ func (this *Multiplexer) body() {
 	for this.running {
 		select {
 		case index := <-this.selector:
-			if index >= int64(len(this.destinations)) {
-				this.err <- fmt.Errorf("Selected non existent destination: %d", index)
+			if index >= int64(len(this.sources0)) {
+				this.err <- fmt.Errorf("Selected non existent source: %d", index)
 			} else if index < 0 {
-				this.err <- fmt.Errorf("Select destination %d is less than zero!", index)
+				this.err <- fmt.Errorf("Select source %d is less than zero!", index)
 			} else {
-				this.destinations[index] <- <-this.source
+				this.destination <- <-this.sources[index]
 			}
 		}
 	}
