@@ -4,11 +4,11 @@ package iris2
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/DrItanium/cores/iris2/arithmetic"
+	"github.com/DrItanium/cores/iris2/branch"
+	"github.com/DrItanium/cores/iris2/cond"
+	"github.com/DrItanium/cores/iris2/mux"
 	"github.com/DrItanium/cores/registration/machine"
-	"github.com/DrItanium/cores/units/arithmetic"
-	"github.com/DrItanium/cores/units/branch"
-	"github.com/DrItanium/cores/units/cond"
-	"github.com/DrItanium/cores/units/mux"
 )
 
 func RegistrationName() string {
@@ -207,13 +207,13 @@ type Core struct {
 	alu                *arithmetic.Unit
 	bu                 *branch.Unit
 	cond               *cond.Unit
-	control            chan int64
+	control            chan Word
 }
 
 func (this *Core) wireupUnits() {
-
-	this.gpr = newRegisterFile(nil, nil)
-	this.gprMux = mux.New
+	this.control = make(chan Word)
+	this.gpr = newRegisterFile(this.control, nil)
+	//this.gprMux = mux.New(this.control
 }
 
 func (this *Core) SetRegister(index byte, value Word) error {

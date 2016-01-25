@@ -2,20 +2,23 @@ package branch
 
 import (
 	"fmt"
+	"github.com/DrItanium/cores/iris2"
 )
 
-// 16bit unit
 type Unit struct {
 	running                    bool
-	condition, onTrue, onFalse <-chan uint64
-	Control                    <-chan uint64
-	out                        chan uint64
-	Result                     <-chan uint64
+	out                        chan iris2.Word
+	err                        chan error
+	condition, onTrue, onFalse <-chan iris2.Word
+	Control                    <-chan iris2.Word
+	Result                     <-chan iris2.Word
+	Error                      <-chan error
 }
 
-func New16(control, condition, onTrue, onFalse <-chan uint64) (*Unit, error) {
+func New(control, condition, onTrue, onFalse <-chan iris2.Word) (*Unit, error) {
 	var unit Unit
-	unit.out = make(chan uint64)
+	unit.out = make(chan iris2.Word)
+	unit.err = make(chan error)
 	unit.Result = unit.out
 	unit.condition = condition
 	unit.Control = control
@@ -39,7 +42,9 @@ func (this *Unit) Startup() error {
 }
 func (this *Unit) controlStream() {
 	<-this.Control
-	this.terminate()
+	if err := this.terminate(); err != nil {
+		this.err <- err
+	}
 }
 func (this *Unit) body() {
 	for this.running {
