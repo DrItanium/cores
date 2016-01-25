@@ -8,6 +8,7 @@ import (
 	"github.com/DrItanium/cores/units/arithmetic"
 	"github.com/DrItanium/cores/units/branch"
 	"github.com/DrItanium/cores/units/cond"
+	"github.com/DrItanium/cores/units/mux"
 )
 
 func RegistrationName() string {
@@ -24,7 +25,7 @@ func init() {
 
 const (
 	RegisterCount            = 256
-	MemorySize               = 65536
+	MemorySize               = 131072 // 131072 * 8 = 1 megabyte but we use a mmu to lay the memory out appropriately
 	MajorOperationGroupCount = 8
 	SystemCallCount          = 256
 )
@@ -191,7 +192,6 @@ type SystemCall ExecutionUnit
 type wordMemory struct {
 }
 type Core struct {
-	gpr                *registerFile
 	code               [MemorySize]Instruction
 	data               [MemorySize]Word
 	ucode              [MemorySize]Word
@@ -202,9 +202,18 @@ type Core struct {
 	terminateExecution bool
 	groups             [MajorOperationGroupCount]ExecutionUnit
 	systemCalls        [SystemCallCount]SystemCall
-	alu                *arithmetic.SignedUnit
+	gprMux             *mux.Unit
+	gpr                *registerFile
+	alu                *arithmetic.Unit
 	bu                 *branch.Unit
 	cond               *cond.Unit
+	control            chan int64
+}
+
+func (this *Core) wireupUnits() {
+
+	this.gpr = newRegisterFile(nil, nil)
+	this.gprMux = mux.New
 }
 
 func (this *Core) SetRegister(index byte, value Word) error {

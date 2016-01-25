@@ -109,7 +109,7 @@ func init() {
 		panic("Too many arithmetic operations defined! Programmer failure!")
 	}
 }
-type 
+
 func arithmetic(core *Core, inst *DecodedInstruction) error {
 	var arg0, arg1 Word
 	var err error

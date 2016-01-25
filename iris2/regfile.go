@@ -10,18 +10,21 @@ type registerFile struct {
 	callPointer        Word
 	predicate          Word
 	gpr                [RegisterCount - UserRegisterBegin]Word
-	err                chan error
-	out                chan Word
-	index              chan byte
-	value              chan interface{}
-	Error              <-chan error
-	Control            <-chan Word
-	Index              chan<- byte
-	Value              chan<- interface{}
-	Result             <-chan Word
-	Operation          <-chan byte
-	running            bool
-	temp               Word // temporary storage for internal swap operations
+
+	err   chan error
+	out   chan Word
+	index chan byte
+	value chan interface{}
+
+	Error     <-chan error
+	Control   <-chan Word
+	Index     chan<- byte
+	Value     chan<- interface{}
+	Result    <-chan Word
+	Operation <-chan byte
+
+	running bool
+	temp    Word // temporary storage for internal swap operations
 }
 
 const (
@@ -42,6 +45,22 @@ const (
 	registerFileOpCount
 )
 
+func newRegisterFile(control <-chan Word, op <-chan byte) *registerFile {
+	var this registerFile
+	this.err = make(chan error)
+	this.out = make(chan Word)
+	this.index = make(chan byte)
+	this.value = make(chan interface{})
+
+	this.Error = this.err
+	this.Control = control
+	this.Operation = op
+	this.Result = this.out
+	this.Index = this.index
+	this.Value = this.value
+
+	return &this
+}
 func (this *registerFile) setRegister(index byte, value Word) error {
 	switch index {
 	case FalseRegister:
