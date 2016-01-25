@@ -19,20 +19,12 @@ func RegistrationName() string {
 	return "xand"
 }
 
-func Register() {}
-
-type MachineRegistrar func(...interface{}) (machine.Machine, error)
-
-func (this MachineRegistrar) New(args ...interface{}) (machine.Machine, error) {
-	return this(args)
-}
-
 func generateCore(a ...interface{}) (machine.Machine, error) {
 	return New()
 }
 
 func init() {
-	machine.Register(RegistrationName(), MachineRegistrar(generateCore))
+	machine.Register(RegistrationName(), machine.Registrar(generateCore))
 }
 
 type Core struct {
@@ -104,12 +96,6 @@ func New() (*Core, error) {
 	return &Core{}, nil
 }
 
-type ParsingRegistrar func(...interface{}) (parser.Parser, error)
-
-func (this ParsingRegistrar) New(args ...interface{}) (parser.Parser, error) {
-	return this(args)
-}
-
 func generateParser(a ...interface{}) (parser.Parser, error) {
 	var p _parser
 	if core, err := New(); err != nil {
@@ -122,7 +108,7 @@ func generateParser(a ...interface{}) (parser.Parser, error) {
 }
 
 func init() {
-	parser.Register(RegistrationName(), ParsingRegistrar(generateParser))
+	parser.Register(RegistrationName(), parser.Registrar(generateParser))
 }
 
 type deferredAddress struct {
