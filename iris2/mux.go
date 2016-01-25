@@ -15,18 +15,18 @@ type Mux struct {
 	Error       <-chan error
 }
 
-func NewMux(control, selector <-chan Word, dest chan<- interface{}, src0 <-chan interface{}, srcs ...<-chan interface{}) *Mux {
+func NewMux(control, selector <-chan Word, dest chan<- interface{}) *Mux {
 	var mux Mux
 	mux.err = make(chan error)
 	mux.Error = mux.err
-	mux.sources = []<-chan interface{}{src0}
-	mux.sources = append(mux.sources, srcs...)
 	mux.selector = selector
 	mux.destination = dest
 	mux.Control = control
 	return &mux
 }
-
+func (this *Mux) AddSource(src <-chan interface{}) {
+	this.sources = append(this.sources, src)
+}
 func (this *Mux) body() {
 	for this.running {
 		select {
