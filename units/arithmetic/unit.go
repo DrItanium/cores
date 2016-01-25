@@ -141,7 +141,7 @@ func NewFloatUnit(control, operation <-chan int64, source0, source1 <-chan float
 const (
 	FloatAdd = iota
 	FloatSubtract
-	FloatMultipy
+	FloatMultiply
 	FloatDivide
 	FloatOpCount
 )

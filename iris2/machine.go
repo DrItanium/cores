@@ -5,6 +5,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/DrItanium/cores/registration/machine"
+	"github.com/DrItanium/cores/units/arithmetic"
+	"github.com/DrItanium/cores/units/branch"
+	"github.com/DrItanium/cores/units/cond"
+	"github.com/DrItanium/cores/units/misc"
 )
 
 func RegistrationName() string {
@@ -16,7 +20,6 @@ func generateCore(a ...interface{}) (machine.Machine, error) {
 }
 
 func init() {
-	machine.Register("iris1", machine.Registrar(generateCore))
 	machine.Register(RegistrationName(), machine.Registrar(generateCore))
 }
 
@@ -25,16 +28,6 @@ const (
 	MemorySize               = 65536
 	MajorOperationGroupCount = 8
 	SystemCallCount          = 256
-)
-const (
-	// reserved registers
-	FalseRegister = iota
-	TrueRegister
-	InstructionPointer
-	StackPointer
-	PredicateRegister
-	CallPointer
-	UserRegisterBegin
 )
 
 const (
@@ -197,23 +190,24 @@ func (this IrisError) Error() string {
 type ExecutionUnit func(*Core, *DecodedInstruction) error
 type SystemCall ExecutionUnit
 
+type wordMemory struct {
+}
 type Core struct {
-	gpr   [RegisterCount - UserRegisterBegin]Word
-	code  [MemorySize]Instruction
-	data  [MemorySize]Word
-	ucode [MemorySize]Word
-	stack [MemorySize]Word
-	call  [MemorySize]Word
-	io    []IoDevice
-	// internal registers that should be easy to find
-	instructionPointer Word
-	stackPointer       Word
-	callPointer        Word
-	predicate          Word
+	gpr                *registerFile
+	code               [MemorySize]Instruction
+	data               [MemorySize]Word
+	ucode              [MemorySize]Word
+	stack              [MemorySize]Word
+	call               [MemorySize]Word
+	io                 []IoDevice
 	advancePc          bool
 	terminateExecution bool
 	groups             [MajorOperationGroupCount]ExecutionUnit
 	systemCalls        [SystemCallCount]SystemCall
+	groups             *misc.Multiplexer
+	alu                *arithmetic.SignedUnit
+	bu                 *branch.Unit
+	cond               *cond.Unit
 }
 
 func (this *Core) SetRegister(index byte, value Word) error {

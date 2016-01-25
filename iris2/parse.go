@@ -22,7 +22,6 @@ func generateParser(a ...interface{}) (parser.Parser, error) {
 }
 
 func init() {
-	parser.Register("iris1", parser.Registrar(generateParser))
 	parser.Register(RegistrationName(), parser.Registrar(generateParser))
 }
 

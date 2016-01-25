@@ -1,5 +1,7 @@
 package cond
 
+import "fmt"
+
 type SignedUnit struct {
 	running                     bool
 	out                         chan int64
@@ -30,9 +32,9 @@ func NewSignedUnit(control, operation, source0, source1 <-chan int64) *SignedUni
 	s.operation = operation
 	s.source0 = source0
 	s.source1 = source1
-	s.Error = err
+	s.Error = s.err
 	s.Control = control
-	s.Result = out
+	s.Result = s.out
 	return &s
 }
 func buildIntegerFunction(cond func(int64, int64) bool) func(int64, int64) int64 {
@@ -61,7 +63,6 @@ func init() {
 
 }
 func (this *SignedUnit) body() {
-	var result bool
 	for this.running {
 		select {
 		case op := <-this.operation:
