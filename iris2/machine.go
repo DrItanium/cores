@@ -1,5 +1,5 @@
 // machine description of iris1
-package iris16
+package iris2
 
 import (
 	"encoding/binary"
@@ -8,7 +8,7 @@ import (
 )
 
 func RegistrationName() string {
-	return "iris16"
+	return "iris2"
 }
 
 func generateCore(a ...interface{}) (machine.Machine, error) {

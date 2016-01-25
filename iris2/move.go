@@ -1,5 +1,5 @@
 // move related operations
-package iris16
+package iris2
 
 import "fmt"
 

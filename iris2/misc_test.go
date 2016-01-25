@@ -1,4 +1,4 @@
-package iris16
+package iris2
 
 import "testing"
 
