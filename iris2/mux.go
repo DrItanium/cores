@@ -8,20 +8,25 @@ import (
 type Mux struct {
 	running     bool
 	sources     []<-chan interface{}
-	selector    <-chan Word
-	Control     <-chan Word
-	destination chan<- interface{}
+	selector    chan Word
+	destination chan interface{}
 	err         chan error
+
+	Control     <-chan Word
+	Select      chan<- Word
+	Destination <-chan interface{}
 	Error       <-chan error
 }
 
-func NewMux(control, selector <-chan Word, dest chan<- interface{}) *Mux {
+func NewMux(control chan<- Word) *Mux {
 	var mux Mux
 	mux.err = make(chan error)
+	mux.destination = make(chan interface{})
+	mux.selector = make(chan Word)
 	mux.Error = mux.err
-	mux.selector = selector
-	mux.destination = dest
+	mux.Destination = mux.destination
 	mux.Control = control
+	mux.Select = mux.selector
 	return &mux
 }
 func (this *Mux) AddSource(src <-chan interface{}) {
@@ -30,13 +35,15 @@ func (this *Mux) AddSource(src <-chan interface{}) {
 func (this *Mux) body() {
 	for this.running {
 		select {
-		case index := <-this.selector:
-			if index >= Word(len(this.sources)) {
-				this.err <- fmt.Errorf("Selected non existent source: %d", index)
-			} else if index < 0 {
-				this.err <- fmt.Errorf("Select source %d is less than zero!", index)
-			} else {
-				this.destination <- <-this.sources[index]
+		case index, more := <-this.selector:
+			if more {
+				if index >= Word(len(this.sources)) {
+					this.err <- fmt.Errorf("Selected non existent source: %d", index)
+				} else if index < 0 {
+					this.err <- fmt.Errorf("Select source %d is less than zero!", index)
+				} else {
+					this.destination <- <-this.sources[index]
+				}
 			}
 		}
 	}
@@ -54,6 +61,7 @@ func (this *Mux) shutdown() error {
 		return fmt.Errorf("Attempted to shutdown a multiplexer which isn't running")
 	} else {
 		this.running = false
+		close(this.selector)
 		return nil
 	}
 }

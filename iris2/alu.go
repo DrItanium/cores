@@ -5,25 +5,28 @@ import (
 )
 
 type Alu struct {
-	running                     bool
-	err                         chan error
-	out                         chan Word
-	Result                      <-chan Word
-	Error                       <-chan error
-	Control                     <-chan Word
-	operation, source0, source1 <-chan Word
+	running                          bool
+	err                              chan error
+	out, operation, source0, source1 chan Word
+	Result                           <-chan Word
+	Error                            <-chan error
+	Control                          <-chan Word
+	Operation, Source0, Source1      chan<- Word
 }
 
-func NewAlu(control, operation, source0, source1 <-chan Word) *Alu {
+func NewAlu(control <-chan Word) *Alu {
 	var this Alu
 	this.err = make(chan error)
 	this.out = make(chan Word)
+	this.operation = make(chan Word)
+	this.source0 = make(chan Word)
+	this.source1 = make(chan Word)
 	this.Result = this.out
 	this.Error = this.err
 	this.Control = control
-	this.operation = operation
-	this.source0 = source0
-	this.source1 = source1
+	this.Operation = this.operation
+	this.Source0 = this.source0
+	this.Source1 = this.source1
 	return &this
 }
 
@@ -91,15 +94,17 @@ func (this *Alu) controlQuery() {
 func (this *Alu) body() {
 	for this.running {
 		select {
-		case op := <-this.operation:
-			if op >= IntegerOpCount {
-				this.err <- fmt.Errorf("Index %d is not a legal instruction index!", op)
-			} else if op < 0 {
-				this.err <- fmt.Errorf("Index %d is less than zero!", op)
-			} else if result, err := integerArithmeticOps[op](<-this.source0, <-this.source1); err != nil {
-				this.err <- err
-			} else {
-				this.out <- result
+		case op, more := <-this.operation:
+			if more {
+				if op >= IntegerOpCount {
+					this.err <- fmt.Errorf("Index %d is not a legal instruction index!", op)
+				} else if op < 0 {
+					this.err <- fmt.Errorf("Index %d is less than zero!", op)
+				} else if result, err := integerArithmeticOps[op](<-this.source0, <-this.source1); err != nil {
+					this.err <- err
+				} else {
+					this.out <- result
+				}
 			}
 		}
 	}
@@ -110,6 +115,9 @@ func (this *Alu) shutdown() error {
 		return fmt.Errorf("this unit is not currently running!")
 	} else {
 		this.running = false
+		close(this.operation)
+		close(this.source0)
+		close(this.source1)
 		return nil
 	}
 }
