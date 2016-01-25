@@ -8,7 +8,6 @@ import (
 	"github.com/DrItanium/cores/units/arithmetic"
 	"github.com/DrItanium/cores/units/branch"
 	"github.com/DrItanium/cores/units/cond"
-	"github.com/DrItanium/cores/units/misc"
 )
 
 func RegistrationName() string {
@@ -77,9 +76,8 @@ var errorLookup = []string{
 	"Provided op id %d is larger than the space allotted to specifying the op",
 }
 
-type Word uint16
-type Dword uint32
-type Instruction Dword
+type Word int64
+type Instruction uint32
 
 func (this Instruction) group() byte {
 	return byte(((this & 0x000000FF) & 0x7))
@@ -204,7 +202,6 @@ type Core struct {
 	terminateExecution bool
 	groups             [MajorOperationGroupCount]ExecutionUnit
 	systemCalls        [SystemCallCount]SystemCall
-	groups             *misc.Multiplexer
 	alu                *arithmetic.SignedUnit
 	bu                 *branch.Unit
 	cond               *cond.Unit
