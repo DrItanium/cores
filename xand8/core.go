@@ -259,52 +259,55 @@ func New() (*Core, error) {
 }
 
 func (this *Core) Run() error {
+	// this xand8 core is now data driven like hardware microcode is (I
+	// think)
 	for {
-		this.memory.Addr <- this.pc
-		this.memory.Addr <- this.pc + 1
-		this.memory.Addr <- this.pc + 2
-		this.memory.Op <- MemoryLoad
-		this.memory.Op <- MemoryLoad
-		this.memory.Op <- MemoryLoad
-		if <-this.memory.Error != nil || <-this.memory.Error != nil || <-this.memory.Error != nil {
+		this.branch.OnFalse <- this.pc + 3 // the onFalse branch will always be pc + 3 so just compute it now
+		// at some point in the future these commands will be executed,
+		// we know what the commands will be so tell the corresponding
+		// units this
+		this.alu.Op <- AluLessThanZero // tell the alu that we are going to check and see if 'a' is less than zero
+		this.memory.Op <- MemoryLoad   // tell the memory unit that we are going to load memory[pc]
+		this.alu.Op <- AluLessThanZero // tell the alu that we are going to check and see if 'b' is less than zero
+		this.memory.Op <- MemoryLoad   // tell the memory unit that we are going to load memory[pc + 1]
+		this.alu.Op <- AluLessThanZero // tell the alu that we are going to check and see if 'c' is less than zero
+		this.memory.Op <- MemoryLoad   // tell the memory unit that we are going to load memory[pc + 2]
+
+		this.memory.Addr <- this.pc                                                                 // load the contents of memory[pc]
+		this.memory.Addr <- this.pc + 1                                                             // load the contents of memory[pc + 1]
+		this.memory.Addr <- this.pc + 2                                                             // load the contents of memory[pc + 2]
+		if <-this.memory.Error != nil || <-this.memory.Error != nil || <-this.memory.Error != nil { // see if the loads were successful
 			return nil
 		}
-		a, b, c := <-this.memory.Result, <-this.memory.Result, <-this.memory.Result
-		this.alu.First <- a
-		this.alu.First <- b
-		this.alu.First <- c
-		this.alu.Op <- AluLessThanZero
-		this.alu.Op <- AluLessThanZero
-		this.alu.Op <- AluLessThanZero
-		// Check and see if a, b, or c are less than zero. Halt if it
-		// is the case
-		ra, rb, rc := <-this.alu.Result, <-this.alu.Result, <-this.alu.Result
-		if ra == 1 || rb == 1 || rc == 1 {
+		// we can cache these commands ahead of time
+		this.memory.Op <- MemoryLoad                                                    // command the memory unit to load the contents of memory[a]
+		this.memory.Op <- MemoryLoad                                                    // command the memory unit to load the contents of memory[b]
+		this.memory.Op <- MemoryStore                                                   // tell the memory unit to perform a store at memory[a]
+		this.alu.Op <- AluSubtract                                                      // tell the alu to perform the subtraction and load two copies of the result into the Result channel
+		a, b, c := <-this.memory.Result, <-this.memory.Result, <-this.memory.Result     // extrac the result of the original three memory loads
+		this.alu.First <- a                                                             // check and see if a is less than zero
+		this.memory.Addr <- a                                                           // denote that we want to load memory[a]
+		this.alu.First <- b                                                             // check and see if b is less than zero
+		this.memory.Addr <- b                                                           // denote that we want to load memory[b]
+		this.alu.First <- c                                                             // check and see if c is less than zero
+		this.memory.Addr <- a                                                           // put a into the address queue ahead of time here for the memory[a] store later on
+		this.branch.OnTrue <- c                                                         // if memory[a] <= 0 then c
+		if <-this.alu.Result == 1 || <-this.alu.Result == 1 || <-this.alu.Result == 1 { // check the results of a, b, c
 			return nil
 		}
 		// setup the conditional check ahead of time since we are
 		// dependent on the resulting condition, nothing more
-		this.branch.OnTrue <- c                    // if memory[a] <= 0 then c
-		this.branch.OnFalse <- this.pc + 3         // else this.pc + 3
-		this.memory.Addr <- a                      // denote that we want to load memory[a]
-		this.memory.Addr <- b                      // denote that we want to load memory[b]
-		this.memory.Addr <- a                      // put a into the address queue ahead of time here for the memory[a] store later on
-		this.memory.Op <- MemoryLoad               // command the memory unit to load the contents of memory[a]
-		this.memory.Op <- MemoryLoad               // command the memory unit to load the contents of memory[b]
 		this.alu.First <- <-this.memory.Result     // load memory[a] into the alu first "register"
 		this.alu.Second <- <-this.memory.Result    // load memory[b] into the alu second "register"
-		this.alu.Op <- AluSubtract                 // tell the alu to perform the subtraction and load two copies of the result into the Result channel
 		this.branch.Condition <- <-this.alu.Result // Use the first copy of the subtraction result as the condition to the branch unit
-		this.pc = <-this.branch.Result             // get the selected value out of the branch unit
 		this.memory.Value <- <-this.alu.Result     // store the second copy of the subtraction result into memory[a]
-		this.memory.Op <- MemoryStore              // tell the memory unit to perform a storeA
-		// clear out the errors from the memory unit before ending the
-		// cycle
-		if err := <-this.memory.Error; err != nil {
+		this.pc = <-this.branch.Result             // get the selected value out of the branch unit
+
+		if err := <-this.memory.Error; err != nil { // clear out the first error from the memory unit
 			return err
-		} else if err := <-this.memory.Error; err != nil {
+		} else if err := <-this.memory.Error; err != nil { // clear out the second error from the memory unit
 			return err
-		} else if err := <-this.memory.Error; err != nil {
+		} else if err := <-this.memory.Error; err != nil { // clear out the third error from the memory unit
 			return err
 		}
 		// and start the process again
