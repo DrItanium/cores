@@ -3,10 +3,11 @@ package iris2
 
 import (
 	"fmt"
+	"github.com/DrItanium/cores/iris16"
 )
 
 type DecoderUnit struct {
-	running bool
+	core    *iris16.Core
 	err     chan error
 	out     chan *DecodedInstruction
 	in      chan Word
@@ -16,15 +17,22 @@ type DecoderUnit struct {
 	Result  <-chan *DecodedInstruction
 }
 
-func NewDecoderUnit(control, input <-chan Word) *DecoderUnit {
+func NewDecoderUnit(control <-chan Word) (*DecoderUnit, error) {
 	var dc DecoderUnit
+	if core, err := iris16.New(); err != nil {
+		return nil, err
+	} else {
+		dc.core = core
+		// need to install the microcode somehow
+	}
+
 	dc.err = make(chan error)
 	dc.out = make(chan *DecodedInstruction)
 	dc.in = make(chan Word)
 	dc.Error = dc.err
 	dc.Input = dc.in
-	dc.Control = control
 	dc.Result = dc.out
+	dc.Control = control
 	return &dc
 }
 
@@ -49,8 +57,11 @@ func (this *DecoderUnit) body() {
 		select {
 		case raw, more := <-this.in:
 			if more {
-				// decode the instruction
-				raw--
+				// an instruction in iris2 is 64-bits long but
+				// it can either be a packet or a single long
+				// instruction, this is determined by the group
+				// bits at the front of the instruction
+
 			}
 		}
 	}
