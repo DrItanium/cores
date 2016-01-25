@@ -1,17 +1,16 @@
-package cond
+package iris2
 
 import (
 	"fmt"
-	"github.com/DrItanium/cores/iris2"
 )
 
-type Unit struct {
+type CondUnit struct {
 	running                     bool
-	out                         chan iris2.Word
+	out                         chan Word
 	err                         chan error
 	Error                       <-chan error
-	Result, Control             <-chan iris2.Word
-	operation, source0, source1 <-chan iris2.Word
+	Result, Control             <-chan Word
+	operation, source0, source1 <-chan Word
 }
 
 const (
@@ -28,9 +27,9 @@ const (
 	NumberOfCondStates
 )
 
-func New(control, operation, source0, source1 <-chan iris2.Word) *Unit {
-	var s Unit
-	s.out = make(chan iris2.Word)
+func NewCondUnit(control, operation, source0, source1 <-chan Word) *CondUnit {
+	var s CondUnit
+	s.out = make(chan Word)
 	s.err = make(chan error)
 	s.operation = operation
 	s.source0 = source0
@@ -40,8 +39,8 @@ func New(control, operation, source0, source1 <-chan iris2.Word) *Unit {
 	s.Result = s.out
 	return &s
 }
-func buildIntegerFunction(cond func(iris2.Word, iris2.Word) bool) func(iris2.Word, iris2.Word) iris2.Word {
-	return func(a, b iris2.Word) iris2.Word {
+func buildIntegerFunction(cond func(Word, Word) bool) func(Word, Word) Word {
+	return func(a, b Word) Word {
 		if cond(a, b) {
 			return 1
 		} else {
@@ -50,22 +49,22 @@ func buildIntegerFunction(cond func(iris2.Word, iris2.Word) bool) func(iris2.Wor
 	}
 }
 
-var dispatchTable [NumberOfCondStates]func(iris2.Word, iris2.Word) iris2.Word
+var dispatchTable [NumberOfCondStates]func(Word, Word) Word
 
 func init() {
-	dispatchTable[Equal] = buildIntegerFunction(func(a, b iris2.Word) bool { return a == b })
-	dispatchTable[NotEqual] = buildIntegerFunction(func(a, b iris2.Word) bool { return a != b })
-	dispatchTable[LessThan] = buildIntegerFunction(func(a, b iris2.Word) bool { return a < b })
-	dispatchTable[GreaterThan] = buildIntegerFunction(func(a, b iris2.Word) bool { return a > b })
-	dispatchTable[LessThanOrEqual] = buildIntegerFunction(func(a, b iris2.Word) bool { return a <= b })
-	dispatchTable[GreaterThanOrEqual] = buildIntegerFunction(func(a, b iris2.Word) bool { return a >= b })
-	dispatchTable[SelectSource0] = func(a, _ iris2.Word) iris2.Word { return a }
-	dispatchTable[SelectSource1] = func(_, b iris2.Word) iris2.Word { return b }
-	dispatchTable[PassTrue] = func(_, _ iris2.Word) iris2.Word { return 1 }
-	dispatchTable[PassFalse] = func(_, _ iris2.Word) iris2.Word { return 0 }
+	dispatchTable[Equal] = buildIntegerFunction(func(a, b Word) bool { return a == b })
+	dispatchTable[NotEqual] = buildIntegerFunction(func(a, b Word) bool { return a != b })
+	dispatchTable[LessThan] = buildIntegerFunction(func(a, b Word) bool { return a < b })
+	dispatchTable[GreaterThan] = buildIntegerFunction(func(a, b Word) bool { return a > b })
+	dispatchTable[LessThanOrEqual] = buildIntegerFunction(func(a, b Word) bool { return a <= b })
+	dispatchTable[GreaterThanOrEqual] = buildIntegerFunction(func(a, b Word) bool { return a >= b })
+	dispatchTable[SelectSource0] = func(a, _ Word) Word { return a }
+	dispatchTable[SelectSource1] = func(_, b Word) Word { return b }
+	dispatchTable[PassTrue] = func(_, _ Word) Word { return 1 }
+	dispatchTable[PassFalse] = func(_, _ Word) Word { return 0 }
 
 }
-func (this *Unit) body() {
+func (this *CondUnit) body() {
 	for this.running {
 		select {
 		case op := <-this.operation:
@@ -80,16 +79,16 @@ func (this *Unit) body() {
 	}
 }
 
-func (this *Unit) controlQuery() {
+func (this *CondUnit) controlQuery() {
 	<-this.Control
 	this.shutdown()
 }
 
-func (this *Unit) shutdown() {
+func (this *CondUnit) shutdown() {
 	this.running = false
 }
 
-func (this *Unit) Startup() error {
+func (this *CondUnit) Startup() error {
 	if this.running {
 		return fmt.Errorf("Given conditional unit is already running!")
 	} else {

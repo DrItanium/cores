@@ -1,23 +1,22 @@
-package branch
+package iris2
 
 import (
 	"fmt"
-	"github.com/DrItanium/cores/iris2"
 )
 
-type Unit struct {
+type BranchUnit struct {
 	running                    bool
-	out                        chan iris2.Word
+	out                        chan Word
 	err                        chan error
-	condition, onTrue, onFalse <-chan iris2.Word
-	Control                    <-chan iris2.Word
-	Result                     <-chan iris2.Word
+	condition, onTrue, onFalse <-chan Word
+	Control                    <-chan Word
+	Result                     <-chan Word
 	Error                      <-chan error
 }
 
-func New(control, condition, onTrue, onFalse <-chan iris2.Word) (*Unit, error) {
-	var unit Unit
-	unit.out = make(chan iris2.Word)
+func NewBranchUnit(control, condition, onTrue, onFalse <-chan Word) (*BranchUnit, error) {
+	var unit BranchUnit
+	unit.out = make(chan Word)
 	unit.err = make(chan error)
 	unit.Result = unit.out
 	unit.condition = condition
@@ -30,7 +29,7 @@ func New(control, condition, onTrue, onFalse <-chan iris2.Word) (*Unit, error) {
 		return &unit, nil
 	}
 }
-func (this *Unit) Startup() error {
+func (this *BranchUnit) Startup() error {
 	if this.running {
 		return fmt.Errorf("Branch unit is already running!")
 	} else {
@@ -40,13 +39,13 @@ func (this *Unit) Startup() error {
 		return nil
 	}
 }
-func (this *Unit) controlStream() {
+func (this *BranchUnit) controlStream() {
 	<-this.Control
 	if err := this.terminate(); err != nil {
 		this.err <- err
 	}
 }
-func (this *Unit) body() {
+func (this *BranchUnit) body() {
 	for this.running {
 		if cond, onTrue, onFalse := <-this.condition, <-this.onTrue, <-this.onFalse; cond != 0 {
 			this.out <- onTrue
@@ -55,7 +54,7 @@ func (this *Unit) body() {
 		}
 	}
 }
-func (this *Unit) terminate() error {
+func (this *BranchUnit) terminate() error {
 	if this.running {
 		this.running = false
 		return nil

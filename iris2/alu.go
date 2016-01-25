@@ -1,24 +1,23 @@
-package arithmetic
+package iris2
 
 import (
 	"fmt"
-	"github.com/DrItanium/cores/iris2"
 )
 
-type Unit struct {
+type Alu struct {
 	running                     bool
 	err                         chan error
-	out                         chan iris2.Word
-	Result                      <-chan iris2.Word
+	out                         chan Word
+	Result                      <-chan Word
 	Error                       <-chan error
-	Control                     <-chan iris2.Word
-	operation, source0, source1 <-chan iris2.Word
+	Control                     <-chan Word
+	operation, source0, source1 <-chan Word
 }
 
-func NewIntegerUnit(control, operation, source0, source1 <-chan iris2.Word) *Unit {
-	var this Unit
+func NewAlu(control, operation, source0, source1 <-chan Word) *Alu {
+	var this Alu
 	this.err = make(chan error)
-	this.out = make(chan iris2.Word)
+	this.out = make(chan Word)
 	this.Result = this.out
 	this.Error = this.err
 	this.Control = control
@@ -44,36 +43,36 @@ const (
 	IntegerOpCount
 )
 
-var integerArithmeticOps [IntegerOpCount]func(iris2.Word, iris2.Word) (iris2.Word, error)
+var integerArithmeticOps [IntegerOpCount]func(Word, Word) (Word, error)
 
 func init() {
-	integerArithmeticOps[IntegerAdd] = func(a, b iris2.Word) (iris2.Word, error) { return a + b, nil }
-	integerArithmeticOps[IntegerSubtract] = func(a, b iris2.Word) (iris2.Word, error) { return a - b, nil }
-	integerArithmeticOps[IntegerMultiply] = func(a, b iris2.Word) (iris2.Word, error) { return a * b, nil }
-	integerArithmeticOps[IntegerDivide] = func(num, denom iris2.Word) (iris2.Word, error) {
+	integerArithmeticOps[IntegerAdd] = func(a, b Word) (Word, error) { return a + b, nil }
+	integerArithmeticOps[IntegerSubtract] = func(a, b Word) (Word, error) { return a - b, nil }
+	integerArithmeticOps[IntegerMultiply] = func(a, b Word) (Word, error) { return a * b, nil }
+	integerArithmeticOps[IntegerDivide] = func(num, denom Word) (Word, error) {
 		if denom == 0 {
 			return 0, fmt.Errorf("Divide by zero")
 		} else {
 			return num / denom, nil
 		}
 	}
-	integerArithmeticOps[IntegerRemainder] = func(num, denom iris2.Word) (iris2.Word, error) {
+	integerArithmeticOps[IntegerRemainder] = func(num, denom Word) (Word, error) {
 		if denom == 0 {
 			return 0, fmt.Errorf("Divide by zero")
 		} else {
 			return num % denom, nil
 		}
 	}
-	integerArithmeticOps[IntegerShiftLeft] = func(a, b iris2.Word) (iris2.Word, error) { return a << uiris2.Word(b), nil }
-	integerArithmeticOps[IntegerShiftRight] = func(a, b iris2.Word) (iris2.Word, error) { return a >> uiris2.Word(b), nil }
-	integerArithmeticOps[IntegerAnd] = func(a, b iris2.Word) (iris2.Word, error) { return a & b, nil }
-	integerArithmeticOps[IntegerOr] = func(a, b iris2.Word) (iris2.Word, error) { return a | b, nil }
-	integerArithmeticOps[IntegerNot] = func(a, _ iris2.Word) (iris2.Word, error) { return ^a, nil }
-	integerArithmeticOps[IntegerXor] = func(a, b iris2.Word) (iris2.Word, error) { return a ^ b, nil }
-	integerArithmeticOps[IntegerAndNot] = func(a, b iris2.Word) (iris2.Word, error) { return a &^ b, nil }
+	integerArithmeticOps[IntegerShiftLeft] = func(a, b Word) (Word, error) { return a << uint64(b), nil }
+	integerArithmeticOps[IntegerShiftRight] = func(a, b Word) (Word, error) { return a >> uint64(b), nil }
+	integerArithmeticOps[IntegerAnd] = func(a, b Word) (Word, error) { return a & b, nil }
+	integerArithmeticOps[IntegerOr] = func(a, b Word) (Word, error) { return a | b, nil }
+	integerArithmeticOps[IntegerNot] = func(a, _ Word) (Word, error) { return ^a, nil }
+	integerArithmeticOps[IntegerXor] = func(a, b Word) (Word, error) { return a ^ b, nil }
+	integerArithmeticOps[IntegerAndNot] = func(a, b Word) (Word, error) { return a &^ b, nil }
 }
 
-func (this *Unit) Startup() error {
+func (this *Alu) Startup() error {
 	if this.running {
 		return fmt.Errorf("Arithmetic unit is already running")
 	} else {
@@ -83,13 +82,13 @@ func (this *Unit) Startup() error {
 		return nil
 	}
 }
-func (this *Unit) controlQuery() {
+func (this *Alu) controlQuery() {
 	<-this.Control
 	if err := this.shutdown(); err != nil {
 		this.err <- err
 	}
 }
-func (this *Unit) body() {
+func (this *Alu) body() {
 	for this.running {
 		select {
 		case op := <-this.operation:
@@ -106,7 +105,7 @@ func (this *Unit) body() {
 	}
 }
 
-func (this *Unit) shutdown() error {
+func (this *Alu) shutdown() error {
 	if !this.running {
 		return fmt.Errorf("this unit is not currently running!")
 	} else {
@@ -115,19 +114,19 @@ func (this *Unit) shutdown() error {
 	}
 }
 
-type FloatUnit struct {
+type Fpu struct {
 	running          bool
 	err              chan error
 	out              chan float64
 	Result           <-chan float64
 	Error            <-chan error
-	Control          <-chan iris2.Word
-	operation        <-chan iris2.Word
+	Control          <-chan Word
+	operation        <-chan Word
 	source0, source1 <-chan float64
 }
 
-func NewFloatUnit(control, operation <-chan iris2.Word, source0, source1 <-chan float64) *FloatUnit {
-	var this FloatUnit
+func NewFpu(control, operation <-chan Word, source0, source1 <-chan float64) *Fpu {
+	var this Fpu
 	this.err = make(chan error)
 	this.out = make(chan float64)
 	this.Result = this.out
@@ -156,7 +155,7 @@ func init() {
 	floatArithmeticOps[FloatDivide] = func(a, b float64) float64 { return a / b }
 }
 
-func (this *FloatUnit) Startup() error {
+func (this *Fpu) Startup() error {
 	if this.running {
 		return fmt.Errorf("Arithmetic unit is already running")
 	} else {
@@ -167,14 +166,14 @@ func (this *FloatUnit) Startup() error {
 	}
 }
 
-func (this *FloatUnit) controlQuery() {
+func (this *Fpu) controlQuery() {
 	<-this.Control
 	if err := this.shutdown(); err != nil {
 		this.err <- err
 	}
 }
 
-func (this *FloatUnit) body() {
+func (this *Fpu) body() {
 	for this.running {
 		select {
 		case op := <-this.operation:
@@ -189,7 +188,7 @@ func (this *FloatUnit) body() {
 	}
 }
 
-func (this *FloatUnit) shutdown() error {
+func (this *Fpu) shutdown() error {
 	if !this.running {
 		return fmt.Errorf("this unit is not currently running!")
 	} else {

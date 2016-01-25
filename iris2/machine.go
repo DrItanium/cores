@@ -4,10 +4,6 @@ package iris2
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/DrItanium/cores/iris2/arithmetic"
-	"github.com/DrItanium/cores/iris2/branch"
-	"github.com/DrItanium/cores/iris2/cond"
-	"github.com/DrItanium/cores/iris2/mux"
 	"github.com/DrItanium/cores/registration/machine"
 )
 
@@ -202,57 +198,17 @@ type Core struct {
 	terminateExecution bool
 	groups             [MajorOperationGroupCount]ExecutionUnit
 	systemCalls        [SystemCallCount]SystemCall
-	gprMux             *mux.Unit
+	gprMux             *Mux
 	gpr                *registerFile
-	alu                *arithmetic.Unit
-	bu                 *branch.Unit
-	cond               *cond.Unit
+	alu                *Alu
+	bu                 *BranchUnit
+	cond               *CondUnit
 	control            chan Word
 }
 
 func (this *Core) wireupUnits() {
 	this.control = make(chan Word)
 	this.gpr = newRegisterFile(this.control, nil)
-	//this.gprMux = mux.New(this.control
-}
-
-func (this *Core) SetRegister(index byte, value Word) error {
-	switch index {
-	case FalseRegister:
-		return NewError(ErrorWriteToFalseRegister, uint(value))
-	case TrueRegister:
-		return NewError(ErrorWriteToTrueRegister, uint(value))
-	case InstructionPointer:
-		this.instructionPointer = value
-	case StackPointer:
-		this.stackPointer = value
-	case PredicateRegister:
-		this.predicate = value
-	case CallPointer:
-		this.callPointer = value
-	default:
-		this.gpr[index-UserRegisterBegin] = value
-	}
-	return nil
-}
-func (this *Core) Register(index byte) Word {
-	switch index {
-	case FalseRegister:
-		return 0
-	case TrueRegister:
-		return 1
-	case InstructionPointer:
-		return this.instructionPointer
-	case StackPointer:
-		return this.stackPointer
-	case PredicateRegister:
-		return this.predicate
-	case CallPointer:
-		return this.callPointer
-	default:
-		// do the offset calculation
-		return this.gpr[index-UserRegisterBegin]
-	}
 }
 
 func (this *Core) CodeMemory(address Word) Instruction {
