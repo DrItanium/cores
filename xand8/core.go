@@ -23,10 +23,10 @@ type BranchUnit struct {
 func NewBranchUnit() *BranchUnit {
 	var b BranchUnit
 	b.control = make(chan Word)
-	b.cond = make(chan Word)
-	b.onTrue = make(chan Word)
-	b.onFalse = make(chan Word)
-	b.out = make(chan Word)
+	b.cond = make(chan Word, 4)
+	b.onTrue = make(chan Word, 4)
+	b.onFalse = make(chan Word, 4)
+	b.out = make(chan Word, 4)
 	b.Control = b.control
 	b.Condition = b.cond
 	b.OnTrue = b.onTrue
@@ -73,6 +73,7 @@ type MemoryUnit struct {
 	running                  bool
 	memory                   [MemorySize]Word
 	control, op, addr, value chan Word
+	out                      chan Word
 	err                      chan error
 	Control, Op, Addr, Value chan<- Word
 	Result                   <-chan Word
@@ -86,12 +87,13 @@ func NewMemoryUnit() *MemoryUnit {
 	b.op = make(chan Word, MemorySize)
 	b.addr = make(chan Word, MemorySize)
 	b.value = make(chan Word, MemorySize)
+	b.out = make(chan Word, MemorySize)
 	b.Control = b.control
 	b.Error = b.err
 	b.Op = b.op
 	b.Addr = b.addr
 	b.Value = b.value
-	b.Result = b.value
+	b.Result = b.out
 	go b.controlInvoke()
 	return &b
 }
@@ -124,7 +126,7 @@ func (this *MemoryUnit) body() {
 			} else {
 				switch op {
 				case 0: // load
-					this.value <- this.memory[addr]
+					this.out <- this.memory[addr]
 					this.err <- nil
 				case 1: // store
 					this.memory[addr] = <-this.value
@@ -187,19 +189,20 @@ func (this *Alu) body() {
 	for this.running {
 		select {
 		case op := <-this.op:
+			a := <-this.a
 			switch op {
 			case 0:
-				result := (<-this.a - <-this.b)
+				result := (a - <-this.b)
 				this.out <- result
 				this.out <- result
 			case 1:
-				if <-this.a < 0 {
+				if a < 0 {
 					this.out <- 1
 				} else {
 					this.out <- 0
 				}
 			case 2:
-				if <-this.a <= 0 {
+				if a <= 0 {
 					this.out <- 1
 				} else {
 					this.out <- 0
@@ -230,6 +233,7 @@ type Core struct {
 	branch *BranchUnit
 	memory *MemoryUnit
 	alu    *Alu
+	debug  bool
 }
 
 func New() (*Core, error) {
@@ -237,6 +241,9 @@ func New() (*Core, error) {
 	c.branch = NewBranchUnit()
 	c.memory = NewMemoryUnit()
 	c.alu = NewAlu()
+	c.branch.Control <- 0
+	c.memory.Control <- 0
+	c.alu.Control <- 0
 	return &c, nil
 }
 
@@ -260,7 +267,8 @@ func (this *Core) Run() error {
 		this.alu.Op <- 1
 		// Check and see if a, b, or c are less than zero. Halt if it
 		// is the case
-		if <-this.alu.Result == 1 || <-this.alu.Result == 1 || <-this.alu.Result == 1 {
+		ra, rb, rc := <-this.alu.Result, <-this.alu.Result, <-this.alu.Result
+		if ra == 1 || rb == 1 || rc == 1 {
 			return nil
 		}
 		// setup the conditional check ahead of time since we are
@@ -275,18 +283,24 @@ func (this *Core) Run() error {
 		this.alu.First <- <-this.memory.Result     // load memory[a] into the alu first "register"
 		this.alu.Second <- <-this.memory.Result    // load memory[b] into the alu second "register"
 		this.alu.Op <- 0                           // tell the alu to perform the subtraction and load two copies of the result into the Result channel
-		this.memory.Value <- <-this.alu.Result     // store the first copy of the subtraction result into memory[a]
-		this.memory.Op <- 1                        // tell the memory unit to perform a storeA
-		this.branch.Condition <- <-this.alu.Result // Use the second copy of the subtraction result as the condition to the branch unit
+		this.branch.Condition <- <-this.alu.Result // Use the first copy of the subtraction result as the condition to the branch unit
 		this.pc = <-this.branch.Result             // get the selected value out of the branch unit
+		this.memory.Value <- <-this.alu.Result     // store the second copy of the subtraction result into memory[a]
+		this.memory.Op <- 1                        // tell the memory unit to perform a storeA
+		// clear out the errors from the memory unit before ending the
+		// cycle
+		if err := <-this.memory.Error; err != nil {
+			return err
+		} else if err := <-this.memory.Error; err != nil {
+			return err
+		} else if err := <-this.memory.Error; err != nil {
+			return err
+		}
 		// and start the process again
 	}
 }
 
 func (this *Core) Startup() error {
-	this.branch.Control <- 0
-	this.memory.Control <- 0
-	this.alu.Control <- 0
 	return nil
 }
 
