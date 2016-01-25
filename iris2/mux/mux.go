@@ -3,23 +3,24 @@ package mux
 
 import (
 	"fmt"
+	"github.com/DrItanium/cores/iris2"
 )
 
-type Multiplexer struct {
+type Unit struct {
 	running     bool
 	sources     []<-chan interface{}
-	selector    <-chan int64
-	Control     <-chan int64
+	selector    <-chan iris2.Word
+	Control     <-chan iris2.Word
 	destination chan<- interface{}
 	err         chan error
 	Error       <-chan error
 }
 
-func NewMultiplexer(control, selector <-chan int64, dest chan<- interface{}, src0 <-chan interface{}, srcs ...<-chan interface{}) *Multiplexer {
-	var mux Multiplexer
+func New(control, selector <-chan iris2.Word, dest chan<- interface{}, src0 <-chan interface{}, srcs ...<-chan interface{}) *Unit {
+	var mux Unit
 	mux.err = make(chan error)
 	mux.Error = mux.err
-	mux.sources = []chan<- interface{}{src0}
+	mux.sources = []<-chan interface{}{src0}
 	mux.sources = append(mux.sources, srcs...)
 	mux.selector = selector
 	mux.destination = dest
@@ -27,11 +28,11 @@ func NewMultiplexer(control, selector <-chan int64, dest chan<- interface{}, src
 	return &mux
 }
 
-func (this *Multiplexer) body() {
+func (this *Unit) body() {
 	for this.running {
 		select {
 		case index := <-this.selector:
-			if index >= int64(len(this.sources0)) {
+			if index >= iris2.Word(len(this.sources)) {
 				this.err <- fmt.Errorf("Selected non existent source: %d", index)
 			} else if index < 0 {
 				this.err <- fmt.Errorf("Select source %d is less than zero!", index)
@@ -42,14 +43,14 @@ func (this *Multiplexer) body() {
 	}
 }
 
-func (this *Multiplexer) queryControl() {
+func (this *Unit) queryControl() {
 	<-this.Control
 	if err := this.shutdown(); err != nil {
 		this.err <- err
 	}
 }
 
-func (this *Multiplexer) shutdown() error {
+func (this *Unit) shutdown() error {
 	if !this.running {
 		return fmt.Errorf("Attempted to shutdown a multiplexer which isn't running")
 	} else {
@@ -58,7 +59,7 @@ func (this *Multiplexer) shutdown() error {
 	}
 }
 
-func (this *Multiplexer) Startup() error {
+func (this *Unit) Startup() error {
 	if this.running {
 		return fmt.Errorf("Given multiplexer is already running!")
 	} else {

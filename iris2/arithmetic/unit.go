@@ -2,22 +2,23 @@ package arithmetic
 
 import (
 	"fmt"
+	"github.com/DrItanium/cores/iris2"
 )
 
 type Unit struct {
 	running                     bool
 	err                         chan error
-	out                         chan int64
-	Result                      <-chan int64
+	out                         chan iris2.Word
+	Result                      <-chan iris2.Word
 	Error                       <-chan error
-	Control                     <-chan int64
-	operation, source0, source1 <-chan int64
+	Control                     <-chan iris2.Word
+	operation, source0, source1 <-chan iris2.Word
 }
 
-func NewIntegerUnit(control, operation, source0, source1 <-chan int64) *Unit {
+func NewIntegerUnit(control, operation, source0, source1 <-chan iris2.Word) *Unit {
 	var this Unit
 	this.err = make(chan error)
-	this.out = make(chan int64)
+	this.out = make(chan iris2.Word)
 	this.Result = this.out
 	this.Error = this.err
 	this.Control = control
@@ -43,33 +44,33 @@ const (
 	IntegerOpCount
 )
 
-var integerArithmeticOps [IntegerOpCount]func(int64, int64) (int64, error)
+var integerArithmeticOps [IntegerOpCount]func(iris2.Word, iris2.Word) (iris2.Word, error)
 
 func init() {
-	integerArithmeticOps[IntegerAdd] = func(a, b int64) (int64, error) { return a + b, nil }
-	integerArithmeticOps[IntegerSubtract] = func(a, b int64) (int64, error) { return a - b, nil }
-	integerArithmeticOps[IntegerMultiply] = func(a, b int64) (int64, error) { return a * b, nil }
-	integerArithmeticOps[IntegerDivide] = func(num, denom int64) (int64, error) {
+	integerArithmeticOps[IntegerAdd] = func(a, b iris2.Word) (iris2.Word, error) { return a + b, nil }
+	integerArithmeticOps[IntegerSubtract] = func(a, b iris2.Word) (iris2.Word, error) { return a - b, nil }
+	integerArithmeticOps[IntegerMultiply] = func(a, b iris2.Word) (iris2.Word, error) { return a * b, nil }
+	integerArithmeticOps[IntegerDivide] = func(num, denom iris2.Word) (iris2.Word, error) {
 		if denom == 0 {
 			return 0, fmt.Errorf("Divide by zero")
 		} else {
 			return num / denom, nil
 		}
 	}
-	integerArithmeticOps[IntegerRemainder] = func(num, denom int64) (int64, error) {
+	integerArithmeticOps[IntegerRemainder] = func(num, denom iris2.Word) (iris2.Word, error) {
 		if denom == 0 {
 			return 0, fmt.Errorf("Divide by zero")
 		} else {
 			return num % denom, nil
 		}
 	}
-	integerArithmeticOps[IntegerShiftLeft] = func(a, b int64) (int64, error) { return a << uint64(b), nil }
-	integerArithmeticOps[IntegerShiftRight] = func(a, b int64) (int64, error) { return a >> uint64(b), nil }
-	integerArithmeticOps[IntegerAnd] = func(a, b int64) (int64, error) { return a & b, nil }
-	integerArithmeticOps[IntegerOr] = func(a, b int64) (int64, error) { return a | b, nil }
-	integerArithmeticOps[IntegerNot] = func(a, _ int64) (int64, error) { return ^a, nil }
-	integerArithmeticOps[IntegerXor] = func(a, b int64) (int64, error) { return a ^ b, nil }
-	integerArithmeticOps[IntegerAndNot] = func(a, b int64) (int64, error) { return a &^ b, nil }
+	integerArithmeticOps[IntegerShiftLeft] = func(a, b iris2.Word) (iris2.Word, error) { return a << uiris2.Word(b), nil }
+	integerArithmeticOps[IntegerShiftRight] = func(a, b iris2.Word) (iris2.Word, error) { return a >> uiris2.Word(b), nil }
+	integerArithmeticOps[IntegerAnd] = func(a, b iris2.Word) (iris2.Word, error) { return a & b, nil }
+	integerArithmeticOps[IntegerOr] = func(a, b iris2.Word) (iris2.Word, error) { return a | b, nil }
+	integerArithmeticOps[IntegerNot] = func(a, _ iris2.Word) (iris2.Word, error) { return ^a, nil }
+	integerArithmeticOps[IntegerXor] = func(a, b iris2.Word) (iris2.Word, error) { return a ^ b, nil }
+	integerArithmeticOps[IntegerAndNot] = func(a, b iris2.Word) (iris2.Word, error) { return a &^ b, nil }
 }
 
 func (this *Unit) Startup() error {
@@ -120,12 +121,12 @@ type FloatUnit struct {
 	out              chan float64
 	Result           <-chan float64
 	Error            <-chan error
-	Control          <-chan int64
-	operation        <-chan int64
+	Control          <-chan iris2.Word
+	operation        <-chan iris2.Word
 	source0, source1 <-chan float64
 }
 
-func NewFloatUnit(control, operation <-chan int64, source0, source1 <-chan float64) *FloatUnit {
+func NewFloatUnit(control, operation <-chan iris2.Word, source0, source1 <-chan float64) *FloatUnit {
 	var this FloatUnit
 	this.err = make(chan error)
 	this.out = make(chan float64)
