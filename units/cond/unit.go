@@ -66,9 +66,9 @@ func (this *SignedUnit) body() {
 		select {
 		case op := <-this.operation:
 			if op >= NumberOfCondStates {
-				err <- fmt.Errorf("operation index %d is an undefined instruction!", op)
+				this.err <- fmt.Errorf("operation index %d is an undefined instruction!", op)
 			} else if op < 0 {
-				err <- fmt.Errorf("Send an operation index %d which is less than zero", op)
+				this.err <- fmt.Errorf("Send an operation index %d which is less than zero", op)
 			} else {
 				this.out <- dispatchTable[op](<-this.source0, <-this.source1)
 			}
