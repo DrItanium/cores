@@ -149,10 +149,10 @@ const (
 var floatArithmeticOps [FloatOpCount]func(float64, float64) float64
 
 func init() {
-	floatArithmeticOps[IntegerAdd] = func(a, b float64) float64 { return a + b }
-	floatArithmeticOps[IntegerSubtract] = func(a, b float64) float64 { return a - b }
-	floatArithmeticOps[IntegerMultiply] = func(a, b float64) float64 { return a * b }
-	floatArithmeticOps[IntegerDivide] = func(a, b float64) float64 { return a / b }
+	floatArithmeticOps[FloatAdd] = func(a, b float64) float64 { return a + b }
+	floatArithmeticOps[FloatSubtract] = func(a, b float64) float64 { return a - b }
+	floatArithmeticOps[FloatMultiply] = func(a, b float64) float64 { return a * b }
+	floatArithmeticOps[FloatDivide] = func(a, b float64) float64 { return a / b }
 }
 
 func (this *FloatUnit) Startup() error {
