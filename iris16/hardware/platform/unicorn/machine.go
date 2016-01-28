@@ -1,4 +1,4 @@
-// iris1 core with unicornhat interface
+// iris16 core with unicornhat interface
 
 // +build linux
 // +build arm
@@ -18,7 +18,7 @@ const (
 )
 
 func RegistrationName() string {
-	return "iris1-unicorn"
+	return "iris16-unicorn"
 }
 
 func generateCore(a ...interface{}) (machine.Machine, error) {
@@ -29,8 +29,8 @@ func init() {
 	machine.Register(RegistrationName(), machine.Registrar(generateCore))
 }
 
-func New() (*iris1.Core, error) {
-	if c, err := iris1.New(); err != nil {
+func New() (*iris16.Core, error) {
+	if c, err := iris16.New(); err != nil {
 		return c, err
 	} else {
 		if err := c.RegisterIoDevice(NewLedArray(baseAddress)); err != nil {
@@ -54,7 +54,7 @@ const (
 	numCells
 )
 
-type ledCommand iris1.Word
+type ledCommand iris16.Word
 
 const (
 	ledCommandClear ledCommand = iota
@@ -67,14 +67,14 @@ const (
 )
 
 type LedArray struct {
-	base             iris1.Word
-	brightness       iris1.Word
-	x, y             iris1.Word
-	red, green, blue iris1.Word
+	base             iris16.Word
+	brightness       iris16.Word
+	x, y             iris16.Word
+	red, green, blue iris16.Word
 	initialized      bool
 }
 
-func (this *LedArray) Store(address, value iris1.Word) error {
+func (this *LedArray) Store(address, value iris16.Word) error {
 	if address == (this.base + commandCell) {
 		cmd := ledCommand(value)
 		if cmd >= numLedCommands {
@@ -94,7 +94,7 @@ func (this *LedArray) Store(address, value iris1.Word) error {
 					return err
 				} else {
 					pix := unicornhat.GetPixelColor(pos)
-					this.red, this.green, this.blue = iris1.Word(pix.R), iris1.Word(pix.G), iris1.Word(pix.B)
+					this.red, this.green, this.blue = iris16.Word(pix.R), iris16.Word(pix.G), iris16.Word(pix.B)
 				}
 			case ledCommandSetBrightness:
 				setBrightness(this.brightness)
@@ -128,7 +128,7 @@ func (this *LedArray) Store(address, value iris1.Word) error {
 	}
 }
 
-func (this *LedArray) Load(address iris1.Word) (iris1.Word, error) {
+func (this *LedArray) Load(address iris16.Word) (iris16.Word, error) {
 	if address == (this.base + commandCell) {
 		return 0, fmt.Errorf("Can't read from the command cell of the unicornhat")
 	} else if address == (this.base + brightnessCell) {
@@ -148,25 +148,25 @@ func (this *LedArray) Load(address iris1.Word) (iris1.Word, error) {
 	}
 }
 
-func setBrightness(brightness iris1.Word) {
+func setBrightness(brightness iris16.Word) {
 	unicornhat.SetBrightness(byte(brightness))
 }
-func getBrightness() iris1.Word {
-	return iris1.Word(unicornhat.GetBrightness())
+func getBrightness() iris16.Word {
+	return iris16.Word(unicornhat.GetBrightness())
 }
-func NewLedArray(baseAddr iris1.Word) *LedArray {
+func NewLedArray(baseAddr iris16.Word) *LedArray {
 	var l LedArray
 	l.base = baseAddr
 	return &l
 }
 
-func (this *LedArray) Begin() iris1.Word {
+func (this *LedArray) Begin() iris16.Word {
 	return this.base
 }
-func (this *LedArray) End() iris1.Word {
+func (this *LedArray) End() iris16.Word {
 	return this.base + numCells
 }
-func (this *LedArray) RespondsTo(address iris1.Word) bool {
+func (this *LedArray) RespondsTo(address iris16.Word) bool {
 	return this.base <= address && ((this.base + numCells) >= address)
 }
 func (this *LedArray) Startup() error {
@@ -201,8 +201,8 @@ func (this *LedArray) Shutdown() error {
 }
 
 func generateParser(args ...interface{}) (parser.Parser, error) {
-	// this is a bit of a hack but just call the iris1 parser from the parser list :D
-	return parser.New(iris1.RegistrationName(), args)
+	// this is a bit of a hack but just call the iris16 parser from the parser list :D
+	return parser.New(iris16.RegistrationName(), args)
 }
 
 func init() {
