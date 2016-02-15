@@ -1,4 +1,4 @@
-package iris1
+package iris2
 
 import (
 	"fmt"
@@ -8,12 +8,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 )
-
-type ParsingRegistrar func(...interface{}) (parser.Parser, error)
-
-func (this ParsingRegistrar) New(args ...interface{}) (parser.Parser, error) {
-	return this(args)
-}
 
 func generateParser(a ...interface{}) (parser.Parser, error) {
 	var p _parser
@@ -28,7 +22,7 @@ func generateParser(a ...interface{}) (parser.Parser, error) {
 }
 
 func init() {
-	parser.Register(RegistrationName(), ParsingRegistrar(generateParser))
+	parser.Register(RegistrationName(), parser.Registrar(generateParser))
 }
 
 type nodeType int
@@ -714,8 +708,6 @@ func (this *_parser) parseStatement(stmt *statement) error {
 	return nil
 }
 
-//Match: { "store", Register, Equals, Register, Comma, Register, Comma, SegmentCode },
-//Function: encodeStoreCodeOperation
 var segments = map[string]segment{
 	"code":      codeSegment,
 	"data":      dataSegment,
@@ -827,39 +819,6 @@ func (this *_parser) parseMove(first *node, rest []*node) error {
 					return fmt.Errorf("move op %s doesn't have an immediate form", first.Value.(string))
 				}
 			}
-		}
-	case 8:
-		if !rest[7].Type.comment() {
-			return fmt.Errorf("Too many arguments provided to a load or store code operation")
-		}
-		fallthrough
-	case 7:
-		if dv, err := this.resolveRegister(rest[0]); err != nil {
-			return err
-		} else if rest[1].Type != typeEquals {
-			return fmt.Errorf("An = is necessary to separate the destination register from the component pieces")
-		} else if lower, err := this.resolveRegister(rest[2]); err != nil {
-			return err
-		} else if rest[3].Type != typeComma {
-			return fmt.Errorf("Expected comma following lower register")
-		} else if upper, err := this.resolveRegister(rest[4]); err != nil {
-			return err
-		} else if rest[5].Type != typeComma {
-			return fmt.Errorf("Expected a comma following the upper register")
-		} else if seg, err := rest[6].getSegment(); err != nil {
-			return err
-		} else if seg != codeSegment {
-			return fmt.Errorf("Only code segments can be stored to/loaded from using the dual register format it was")
-		} else {
-			switch first.Type {
-			case keywordLoad:
-				d.Op = MoveOpLoadCode
-			case keywordStore:
-				d.Op = MoveOpStoreCode
-			default:
-				return fmt.Errorf("Illegal move opeartion for dual register format %d", first.Type)
-			}
-			d.Data = [3]byte{dv, lower, upper}
 		}
 	case 6:
 		if !rest[5].Type.comment() {
@@ -982,7 +941,6 @@ func (this *_parser) parseCompare(first *node, rest []*node) error {
 	}
 	return this.installInstruction(d.Encode())
 }
-
 func (this *_parser) parseSystem(d *DecodedInstruction, rest []*node) error {
 	d.Op = MiscOpSystemCall
 	switch len(rest) {
@@ -1018,7 +976,6 @@ func (this *_parser) parseSystem(d *DecodedInstruction, rest []*node) error {
 	}
 	return nil
 }
-
 func (this *_parser) parseMisc(first *node, rest []*node) error {
 	if this.currSegment != codeSegment {
 		return fmt.Errorf("Currently not in code segment, can't insert instruction")

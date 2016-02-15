@@ -1,5 +1,5 @@
 // machine description of iris1
-package iris1
+package iris2
 
 import (
 	"encoding/binary"
@@ -8,16 +8,7 @@ import (
 )
 
 func RegistrationName() string {
-	return "iris1"
-}
-
-// Dummy function to force inclusion
-func Register() {}
-
-type MachineRegistrar func(...interface{}) (machine.Machine, error)
-
-func (this MachineRegistrar) New(args ...interface{}) (machine.Machine, error) {
-	return this(args)
+	return "iris2"
 }
 
 func generateCore(a ...interface{}) (machine.Machine, error) {
@@ -25,24 +16,14 @@ func generateCore(a ...interface{}) (machine.Machine, error) {
 }
 
 func init() {
-	machine.Register(RegistrationName(), MachineRegistrar(generateCore))
+	machine.Register(RegistrationName(), machine.Registrar(generateCore))
 }
 
 const (
 	RegisterCount            = 256
-	MemorySize               = 65536
+	MemorySize               = 131072 // 131072 * 8 = 1 megabyte but we use a mmu to lay the memory out appropriately
 	MajorOperationGroupCount = 8
 	SystemCallCount          = 256
-)
-const (
-	// reserved registers
-	FalseRegister = iota
-	TrueRegister
-	InstructionPointer
-	StackPointer
-	PredicateRegister
-	CallPointer
-	UserRegisterBegin
 )
 
 const (
@@ -92,97 +73,7 @@ var errorLookup = []string{
 	"Provided op id %d is larger than the space allotted to specifying the op",
 }
 
-type Word uint16
-type Dword uint32
-type Instruction Dword
-
-func (this Instruction) group() byte {
-	return byte(((this & 0x000000FF) & 0x7))
-}
-func (this Instruction) op() byte {
-	return byte(((this & 0x000000FF) & 0xF8) >> 3)
-}
-func (this Instruction) register(index int) (byte, error) {
-	switch index {
-	case 0:
-		return byte(this), nil
-	case 1:
-		return byte((this & 0x0000FF00) >> 8), nil
-	case 2:
-		return byte((this & 0x00FF0000) >> 16), nil
-	case 3:
-		return byte((this & 0xFF000000) >> 24), nil
-	default:
-		return 0, fmt.Errorf("Register index: %d is out of range!", index)
-	}
-}
-
-func (this *Instruction) setGroup(group byte) {
-	*this = ((*this &^ 0x7) | Instruction(group))
-}
-func (this *Instruction) setOp(op byte) {
-	*this = ((*this &^ 0xF8) | (Instruction(op) << 3))
-}
-func (this *Instruction) setByte(index int, value byte) error {
-	switch index {
-	case 1:
-		*this = ((*this &^ 0x0000FF00) | (Instruction(value) << 8))
-	case 2:
-		*this = ((*this &^ 0x00FF0000) | (Instruction(value) << 16))
-	case 3:
-		*this = ((*this &^ 0xFF000000) | (Instruction(value) << 24))
-	default:
-		return NewError(ErrorEncodeByteOutOfRange, uint(index))
-	}
-	return nil
-}
-
-type DecodedInstruction struct {
-	Group byte
-	Op    byte
-	Data  [3]byte
-}
-
-func (this Instruction) Decode() (*DecodedInstruction, error) {
-	var di DecodedInstruction
-	di.Group = this.group()
-	di.Op = this.op()
-	if value, err := this.register(1); err != nil {
-		return nil, err
-	} else {
-		di.Data[0] = value
-	}
-	if value, err := this.register(2); err != nil {
-		return nil, err
-	} else {
-		di.Data[1] = value
-	}
-	if value, err := this.register(3); err != nil {
-		return nil, err
-	} else {
-		di.Data[2] = value
-	}
-	return &di, nil
-}
-
-func (this *DecodedInstruction) SetImmediate(value Word) {
-	this.Data[1] = byte(value)
-	this.Data[2] = byte(value >> 8)
-}
-func (this *DecodedInstruction) Immediate() Word {
-	return Word((Word(this.Data[2]) << 8) | Word(this.Data[1]))
-}
-
-func (this *DecodedInstruction) Encode() *Instruction {
-	i := new(Instruction)
-	// encode group
-	i.setGroup(this.Group)
-	i.setOp(this.Op)
-	i.setByte(1, this.Data[0])
-	i.setByte(2, this.Data[1])
-	i.setByte(3, this.Data[2])
-	return i
-}
+type Word int64
 
 type IrisError struct {
 	value, code uint
@@ -205,62 +96,30 @@ func (this IrisError) Error() string {
 type ExecutionUnit func(*Core, *DecodedInstruction) error
 type SystemCall ExecutionUnit
 
+type wordMemory struct {
+}
 type Core struct {
-	gpr   [RegisterCount - UserRegisterBegin]Word
-	code  [MemorySize]Instruction
-	data  [MemorySize]Word
-	ucode [MemorySize]Word
-	stack [MemorySize]Word
-	call  [MemorySize]Word
-	io    []IoDevice
-	// internal registers that should be easy to find
-	instructionPointer Word
-	stackPointer       Word
-	callPointer        Word
-	predicate          Word
+	code               [MemorySize]Instruction
+	data               [MemorySize]Word
+	ucode              [MemorySize]Word
+	stack              [MemorySize]Word
+	call               [MemorySize]Word
+	io                 []IoDevice
 	advancePc          bool
 	terminateExecution bool
 	groups             [MajorOperationGroupCount]ExecutionUnit
 	systemCalls        [SystemCallCount]SystemCall
+	gprMux             *Mux
+	gpr                *registerFile
+	alu                *Alu
+	bu                 *BranchUnit
+	cond               *CondUnit
+	control            chan Word
 }
 
-func (this *Core) SetRegister(index byte, value Word) error {
-	switch index {
-	case FalseRegister:
-		return NewError(ErrorWriteToFalseRegister, uint(value))
-	case TrueRegister:
-		return NewError(ErrorWriteToTrueRegister, uint(value))
-	case InstructionPointer:
-		this.instructionPointer = value
-	case StackPointer:
-		this.stackPointer = value
-	case PredicateRegister:
-		this.predicate = value
-	case CallPointer:
-		this.callPointer = value
-	default:
-		this.gpr[index-UserRegisterBegin] = value
-	}
-	return nil
-}
-func (this *Core) Register(index byte) Word {
-	switch index {
-	case FalseRegister:
-		return 0
-	case TrueRegister:
-		return 1
-	case InstructionPointer:
-		return this.instructionPointer
-	case StackPointer:
-		return this.stackPointer
-	case PredicateRegister:
-		return this.predicate
-	case CallPointer:
-		return this.callPointer
-	default:
-		// do the offset calculation
-		return this.gpr[index-UserRegisterBegin]
-	}
+func (this *Core) wireupUnits() {
+	this.control = make(chan Word)
+	this.gpr = newRegisterFile(this.control, nil)
 }
 
 func (this *Core) CodeMemory(address Word) Instruction {
