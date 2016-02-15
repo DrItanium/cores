@@ -70,12 +70,12 @@ func moveOpStoreCode(core *Core, inst *DecodedInstruction) error {
 func moveOpLoadCode(core *Core, inst *DecodedInstruction) error {
 	// in this case we need to load an Instruction from memory and store it into the upper and lower
 	// registers. The syntax is dest, src0 are lower and upper with src1 being dest
-	idat := core.CodeMemory(core.Register(inst.Data[2]))
+	idat := core.CodeMemory(core.Register(inst.Data[0]))
 	// set the lower and upper halves
 	lowerHalf, upperHalf := Word(idat), Word(idat>>16)
-	if err := core.SetRegister(inst.Data[0], lowerHalf); err != nil {
+	if err := core.SetRegister(inst.Data[1], lowerHalf); err != nil {
 		return err
-	} else if err := core.SetRegister(inst.Data[1], upperHalf); err != nil {
+	} else if err := core.SetRegister(inst.Data[2], upperHalf); err != nil {
 		return err
 	} else {
 		return nil
