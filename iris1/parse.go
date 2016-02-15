@@ -834,7 +834,33 @@ func (this *_parser) parseMove(first *node, rest []*node) error {
 		}
 		fallthrough
 	case 7:
-
+		if dv, err := this.resolveRegister(rest[0]); err != nil {
+			return err
+		} else if rest[1].Type != typeEquals {
+			return fmt.Errorf("An = is necessary to separate the destination register from the component pieces")
+		} else if lower, err := this.resolveRegister(rest[2]); err != nil {
+			return err
+		} else if rest[3].Type != typeComma {
+			return fmt.Errorf("Expected comma following lower register")
+		} else if upper, err := this.resolveRegister(rest[4]); err != nil {
+			return err
+		} else if rest[5].Type != typeComma {
+			return fmt.Errorf("Expected a comma following the upper register")
+		} else if seg, err := rest[6].getSegment(); err != nil {
+			return err
+		} else if seg != codeSegment {
+			return fmt.Errorf("Only code segments can be stored to/loaded from using the dual register format it was")
+		} else {
+			switch first.Type {
+			case keywordLoad:
+				d.Op = MoveOpLoadCode
+			case keywordStore:
+				d.Op = MoveOpStoreCode
+			default:
+				return fmt.Errorf("Illegal move opeartion for dual register format %d", first.Type)
+			}
+			d.Data = [3]byte{dv, lower, upper}
+		}
 	case 6:
 		if !rest[5].Type.comment() {
 			return fmt.Errorf("Too many arguments provided to a normal move operation")
@@ -956,6 +982,7 @@ func (this *_parser) parseCompare(first *node, rest []*node) error {
 	}
 	return this.installInstruction(d.Encode())
 }
+
 func (this *_parser) parseSystem(d *DecodedInstruction, rest []*node) error {
 	d.Op = MiscOpSystemCall
 	switch len(rest) {
@@ -991,6 +1018,7 @@ func (this *_parser) parseSystem(d *DecodedInstruction, rest []*node) error {
 	}
 	return nil
 }
+
 func (this *_parser) parseMisc(first *node, rest []*node) error {
 	if this.currSegment != codeSegment {
 		return fmt.Errorf("Currently not in code segment, can't insert instruction")
@@ -1006,38 +1034,6 @@ func (this *_parser) parseMisc(first *node, rest []*node) error {
 		return fmt.Errorf("Illegal misc operation %s", first.Value)
 	}
 	return this.installInstruction(d.Encode())
-}
-
-type MatchFunction func(nodeType) bool
-type ParseRule struct {
-	Match    []interface{}
-	Function func(*_parser, []*node) error
-}
-
-func (this *ParseRule) Matches(parser *_parser, first *node, rest []*node) bool {
-	if (len(rest)+1 == len(this.Match)) && (rest[0].Type == this.Match[0]) {
-		for ind, typ := range this.Match[1:] {
-			switch typ.(type) {
-			default:
-				return false
-			case nodeType:
-				if rest[ind].Type != typ.(nodeType) {
-					return false
-				}
-			case MatchFunction:
-				if !typ.(MatchFunction)(rest[ind].Type) {
-					return false
-				}
-			}
-		}
-		return true
-	} else {
-		return false
-	}
-}
-
-func (this *ParseRule) Invoke(parser *_parser, rest []*node) error {
-	return this.Function(parser, rest)
 }
 
 func (this *_parser) parseArithmetic(t *node, nodes []*node) error {
