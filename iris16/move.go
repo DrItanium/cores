@@ -13,6 +13,8 @@ const (
 	MoveOpPush
 	MoveOpPop
 	MoveOpPeek
+	MoveOpLoadCode
+	MoveOpStoreCode
 	// always last
 	MoveOpCount
 )
