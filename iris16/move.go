@@ -34,8 +34,8 @@ var moveTable = [32]MoveOp{
 	moveOpPush,
 	moveOpPop,
 	moveOpPeek,
-	unimplementedMoveOp,
-	unimplementedMoveOp,
+	moveOpLoadCode,
+	moveOpStoreCode,
 	unimplementedMoveOp,
 	unimplementedMoveOp,
 	unimplementedMoveOp,
@@ -60,10 +60,32 @@ func init() {
 		panic("Too many move operations registered! Programmer Failure!")
 	}
 }
+
+func moveOpStoreCode(core *Core, inst *DecodedInstruction) error {
+	// this one is a little odd since we have to use the contents of two registers
+	// build an instruction from lower and upper
+	return core.SetCodeMemory(core.Register(inst.Data[0]), (Instruction(core.Register(inst.Data[1])) | (Instruction(core.Register(inst.Data[2])) << 16)))
+}
+func moveOpLoadCode(core *Core, inst *DecodedInstruction) error {
+	// in this case we need to load an Instruction from memory and store it into the upper and lower
+	// registers. The syntax is dest, src0 are lower and upper with src1 being dest
+	idat := core.CodeMemory(core.Register(inst.Data[0]))
+	// set the lower and upper halves
+	lowerHalf, upperHalf := Word(idat), Word(idat>>16)
+	if err := core.SetRegister(inst.Data[1], lowerHalf); err != nil {
+		return err
+	} else if err := core.SetRegister(inst.Data[2], upperHalf); err != nil {
+		return err
+	} else {
+		return nil
+	}
+}
+
 func moveRegister(core *Core, inst *DecodedInstruction) error {
 	dest, src := inst.Data[0], core.Register(inst.Data[1])
 	return core.SetRegister(dest, src)
 }
+
 func swapRegisters(core *Core, inst *DecodedInstruction) error {
 	dest, src0 := inst.Data[0], inst.Data[1]
 	r0, r1 := core.Register(dest), core.Register(src0)
