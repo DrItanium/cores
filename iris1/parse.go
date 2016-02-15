@@ -1017,7 +1017,7 @@ type ParseRule struct {
 func (this *ParseRule) Matches(parser *_parser, first *node, rest []*node) bool {
 	if (len(rest)+1 == len(this.Match)) && (rest[0].Type == this.Match[0]) {
 		for ind, typ := range this.Match[1:] {
-			switch t := typ.(type) {
+			switch typ.(type) {
 			default:
 				return false
 			case nodeType:
